@@ -1,0 +1,8 @@
+# Claude Code local (personal) settings — not shared project config
+.claude/settings.local.json
+
+# Editor backup files
+*~
+
+# Misc local artifacts
+fieldops-backend.zip

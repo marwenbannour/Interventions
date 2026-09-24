@@ -1,0 +1,53 @@
+export default () => ({
+  env: process.env.NODE_ENV ?? 'development',
+  port: parseInt(process.env.PORT ?? '3000', 10),
+  apiPrefix: process.env.API_PREFIX ?? 'api',
+  corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean),
+  db: {
+    host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT ?? '5432', 10),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    name: process.env.DB_NAME,
+    synchronize: process.env.DB_SYNCHRONIZE === 'true',
+    runMigrations: process.env.DB_RUN_MIGRATIONS !== 'false',
+    logging: process.env.DB_LOGGING === 'true',
+  },
+  redis: {
+    host: process.env.REDIS_HOST ?? 'localhost',
+    port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
+  },
+  jwt: {
+    accessSecret: process.env.JWT_ACCESS_SECRET,
+    accessTtl: parseInt(process.env.JWT_ACCESS_TTL ?? '900', 10),
+    refreshTtlDays: parseInt(process.env.JWT_REFRESH_TTL_DAYS ?? '30', 10),
+    mfaSecret: process.env.JWT_MFA_SECRET,
+  },
+  s3: {
+    endpoint: process.env.S3_ENDPOINT || undefined,
+    region: process.env.S3_REGION ?? 'eu-west-3',
+    bucket: process.env.S3_BUCKET ?? 'fieldops-proofs',
+    accessKey: process.env.S3_ACCESS_KEY,
+    secretKey: process.env.S3_SECRET_KEY,
+    forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+    signedUrlTtl: parseInt(process.env.S3_SIGNED_URL_TTL ?? '600', 10),
+  },
+  notifications: {
+    push: process.env.PUSH_PROVIDER ?? 'log',
+    email: process.env.EMAIL_PROVIDER ?? 'log',
+    sms: process.env.SMS_PROVIDER ?? 'log',
+    smtp: {
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT ?? '587', 10),
+      user: process.env.SMTP_USER || undefined,
+      password: process.env.SMTP_PASSWORD || undefined,
+      from: process.env.SMTP_FROM ?? 'FieldOps <no-reply@fieldops.local>',
+    },
+  },
+  throttle: {
+    ttl: parseInt(process.env.THROTTLE_TTL_MS ?? '60000', 10),
+    limit: parseInt(process.env.THROTTLE_LIMIT ?? '120', 10),
+    authLimit: parseInt(process.env.AUTH_THROTTLE_LIMIT ?? '10', 10),
+  },
+});

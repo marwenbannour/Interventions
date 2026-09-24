@@ -1,0 +1,12 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "experimentalDecorators": true,
+    // Les champs de modèle WatermelonDB (@field/@date/@json/@children) sont peuplés par le
+    // décorateur à l'exécution, pas par un initialiseur visible de TypeScript — la vérification
+    // stricte d'initialisation les signalerait à tort. Désactivée globalement plutôt que
+    // par fichier : elle ne concerne que ces classes de modèle dans tout le projet.
+    "strictPropertyInitialization": false
+  }
+}
