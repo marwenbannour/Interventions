@@ -1,0 +1,16 @@
+# fieldops-mobile n'a plus son propre dépôt git (fusionné dans ce monorepo) — EAS Build
+# résout donc la racine du projet ici, pas dans fieldops-mobile/. Un .easignore placé
+# dans le sous-dossier n'était pas lu du tout (taille d'archive inchangée entre deux essais).
+# On exclut les autres apps du monorepo, jamais nécessaires à un build mobile.
+fieldops-web
+fieldops-backend
+fieldops-backend.zip
+README.md
+README.md~
+
+# Dans fieldops-mobile lui-même : réinstallé côté serveur, caches et logs locaux.
+fieldops-mobile/node_modules
+fieldops-mobile/.expo
+fieldops-mobile/*.log
+fieldops-mobile/android
+fieldops-mobile/ios

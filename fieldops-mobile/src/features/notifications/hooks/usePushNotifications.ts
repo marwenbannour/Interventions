@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
-import { navigationRef } from '../../../navigation/RootNavigator';
+import { navigationRef } from '../../../navigation/navigationRef';
 import { registerPushToken } from '../services/pushRegistration';
 
 function navigateFromNotification(response: Notifications.NotificationResponse | null): void {

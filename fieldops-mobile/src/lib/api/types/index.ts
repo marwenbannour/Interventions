@@ -3,3 +3,4 @@ export * from './task';
 export * from './sync';
 export * from './agent';
 export * from './notification';
+export * from './evaluation';

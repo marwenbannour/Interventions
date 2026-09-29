@@ -13,8 +13,6 @@ export interface Evaluation {
 }
 
 export interface EvaluationQuery {
-  agentId?: string;
-  clientId?: string;
   taskId?: string;
   page?: number;
   limit?: number;

@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { NotificationBell } from '@/features/notifications/components/NotificationBell';
 import { disconnectSocket } from '@/lib/realtime/socket';
 import { useRealtimeConnection } from '@/lib/realtime/useRealtimeConnection';
-import { canReadSla, isAdmin } from '@/lib/auth/permissions';
+import { canReadSla, canUseBackoffice, isAdmin } from '@/lib/auth/permissions';
 import { authApi } from '../api/auth.api';
 import { useSessionStore } from '../store/session.store';
 import { ConnectionIndicator } from './ConnectionIndicator';
@@ -47,8 +47,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.replace('/login');
+    } else if (status === 'authenticated' && user?.role === 'CLIENT') {
+      router.replace('/client');
     }
-  }, [status, router]);
+  }, [status, user, router]);
 
   useRealtimeConnection();
 
@@ -72,6 +74,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (status === 'unauthenticated' || !user) {
     return null;
+  }
+
+  if (user.role === 'CLIENT') {
+    return null;
+  }
+
+  if (!canUseBackoffice(user.role)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+          <p className="text-lg font-semibold text-foreground">Accès non autorisé</p>
+          <p className="text-sm text-muted-foreground">
+            Ce backoffice est réservé aux comptes Superviseur, Direction et Administrateur. Le compte{' '}
+            {roleLabel[user.role] ?? user.role} n&apos;y a pas accès.
+          </p>
+          <button
+            type="button"
+            onClick={logout}
+            className="mt-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+          >
+            Se déconnecter
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const initials = `${user.firstName[0] ?? ''}${user.lastName[0] ?? ''}`.toUpperCase();

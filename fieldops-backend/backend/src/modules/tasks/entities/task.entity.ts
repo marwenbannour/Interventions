@@ -116,9 +116,11 @@ export class Task extends TenantBaseEntity {
   @Column({ type: 'timestamptz', nullable: true })
   ackDueAt?: Date | null;
 
+  @Index()
   @Column({ type: 'timestamptz', nullable: true })
   arrivalDueAt?: Date | null;
 
+  @Index()
   @Column({ type: 'timestamptz', nullable: true })
   interventionDueAt?: Date | null;
 

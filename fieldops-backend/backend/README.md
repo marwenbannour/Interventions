@@ -44,7 +44,8 @@ npm run start:dev
 |---|---|---|
 | Administrateur | admin@demo.fieldops.io | `Admin123!demo` |
 | Superviseur / dispatcher | superviseur@demo.fieldops.io | `Superviseur123!` |
-| Direction | direction@demo.fieldops.io | `Direction123!` |
+| Direction | direction@demo.fieldops.io | `4
+` |
 | Agent (×3) | agent1@ / agent2@ / agent3@demo.fieldops.io | `Agent123!demo` |
 | Client (Clinique Saint-Martin) | client@clinique-sm.fr | `Client123!demo` |
 

@@ -12,6 +12,7 @@ const PHOTO_VALIDATE_ROLES: Role[] = ['ADMIN', 'SUPERVISOR'];
 const AGENT_MANAGE_ROLES: Role[] = ['ADMIN', 'SUPERVISOR'];
 const NOTIFICATION_SEND_ROLES: Role[] = ['ADMIN', 'SUPERVISOR'];
 const SLA_READ_ROLES: Role[] = ['ADMIN', 'SUPERVISOR', 'DIRECTION'];
+const BACKOFFICE_ROLES: Role[] = ['ADMIN', 'SUPERVISOR', 'DIRECTION'];
 
 export function canAssignTasks(role: Role): boolean {
   return TASK_ASSIGN_ROLES.includes(role);
@@ -47,4 +48,20 @@ export function canReadSla(role: Role): boolean {
 /** SLA_MANAGE — ADMIN seul peut créer/modifier une politique SLA. */
 export function canManageSla(role: Role): boolean {
   return role === 'ADMIN';
+}
+
+/**
+ * Le backoffice (/dispatch, /agents, /admin...) ne cible que SUPERVISOR/ADMIN/DIRECTION —
+ * AGENT et CLIENT n'ont presque aucune des permissions que ses écrans supposent (CLIENT_READ,
+ * TASK_READ_ALL, AGENT_READ, LOCATION_READ, REPORT_READ...), ce qui produirait une UI cassée
+ * pleine de 403 silencieux plutôt qu'un message clair. CLIENT a son propre espace (/client) ;
+ * AGENT n'a pas d'équivalent web (utilise l'app mobile).
+ */
+export function canUseBackoffice(role: Role): boolean {
+  return BACKOFFICE_ROLES.includes(role);
+}
+
+/** Portail client (/client) — réservé au rôle CLIENT. */
+export function isClient(role: Role): boolean {
+  return role === 'CLIENT';
 }

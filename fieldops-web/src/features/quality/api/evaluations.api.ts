@@ -1,6 +1,6 @@
 import { apiFetch } from '@/lib/api/client';
 import type { Paginated } from '@/lib/api/types';
-import type { Evaluation, EvaluationQuery } from '../types';
+import type { CreateEvaluationInput, Evaluation, EvaluationQuery } from '../types';
 
 export const evaluationsApi = {
   list: (query: EvaluationQuery = {}) => {
@@ -10,4 +10,5 @@ export const evaluationsApi = {
     if (query.taskId) search.set('taskId', query.taskId);
     return apiFetch<Paginated<Evaluation>>(`/evaluations?${search.toString()}`);
   },
+  create: (input: CreateEvaluationInput) => apiFetch<Evaluation>('/evaluations', { method: 'POST', body: input }),
 };

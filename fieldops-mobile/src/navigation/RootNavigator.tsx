@@ -1,5 +1,6 @@
-import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { useEffect } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { registerForceLogoutHandler } from '../lib/api/client';
 import { useSilentRefresh } from '../features/auth/hooks/useSilentRefresh';
@@ -14,27 +15,59 @@ import { usePushNotifications } from '../features/notifications/hooks/usePushNot
 import { unregisterPushToken } from '../features/notifications/services/pushRegistration';
 import { useRealtime } from '../features/notifications/hooks/useRealtime';
 import { disconnectSocket } from '../lib/realtime/socket';
+import { authApi } from '../features/auth/api/auth.api';
+import { secureStorage } from '../lib/secureStorage';
+import { colors } from '../theme/colors';
 import { AuthStack } from './AuthStack';
 import { AppTabs } from './AppTabs';
-import type { AppTabsParamList } from './types';
+import { ClientTabs } from './ClientTabs';
+import { navigationRef } from './navigationRef';
 
 /**
- * Réf de navigation module-level : utilisée par le deep-link des notifications push (M6).
- * Typée sur AppTabsParamList — seul le cas authentifié (AppTabs monté) importe pour
- * la navigation déclenchée depuis l'extérieur d'un composant.
+ * Cette app mobile ne couvre que AGENT (parcours terrain complet) et CLIENT (portail de
+ * consultation + évaluation). ADMIN/SUPERVISOR/DIRECTION utilisent le backoffice web —
+ * un écran clair vaut mieux qu'un AppTabs cassé plein d'appels 403 silencieux (même
+ * raison que le blocage posé côté web pour AGENT/CLIENT sur le backoffice).
  */
-export const navigationRef = createNavigationContainerRef<AppTabsParamList>();
+function UnsupportedRoleScreen() {
+  const clearSession = useSessionStore((s) => s.clearSession);
+
+  const logout = async () => {
+    const refreshToken = await secureStorage.getRefreshToken();
+    if (refreshToken) await authApi.logout({ refreshToken }).catch(() => undefined);
+    disconnectSocket();
+    await secureStorage.clearRefreshToken().catch(() => undefined);
+    clearSession();
+  };
+
+  return (
+    <View style={styles.centered}>
+      <Text style={styles.title}>Accès non pris en charge</Text>
+      <Text style={styles.body}>
+        Cette application mobile est réservée aux comptes Agent et Client. Utilisez le backoffice web pour les autres
+        rôles.
+      </Text>
+      <Text style={styles.link} onPress={logout}>
+        Se déconnecter
+      </Text>
+    </View>
+  );
+}
 
 export function RootNavigator() {
   useSilentRefresh();
   const status = useSessionStore((s) => s.status);
+  const role = useSessionStore((s) => s.user?.role);
   const authenticated = status === 'authenticated';
-  useSyncEngine(authenticated);
-  usePhotoUploadQueue(authenticated);
-  useAgentProfile(authenticated);
-  useBackgroundLocation(authenticated);
-  usePushNotifications(authenticated);
-  useRealtime(authenticated);
+  const isAgent = authenticated && role === 'AGENT';
+  const isClient = authenticated && role === 'CLIENT';
+
+  useSyncEngine(isAgent);
+  usePhotoUploadQueue(isAgent);
+  useAgentProfile(isAgent);
+  useBackgroundLocation(isAgent);
+  usePushNotifications(isAgent || isClient);
+  useRealtime(isAgent);
 
   useEffect(() => {
     registerForceLogoutHandler(() => {
@@ -53,7 +86,14 @@ export function RootNavigator() {
 
   return (
     <NavigationContainer ref={navigationRef}>
-      {status === 'authenticated' ? <AppTabs /> : <AuthStack />}
+      {isAgent ? <AppTabs /> : isClient ? <ClientTabs /> : authenticated ? <UnsupportedRoleScreen /> : <AuthStack />}
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, padding: 24, gap: 12 },
+  title: { fontSize: 18, fontWeight: '700', color: colors.text, textAlign: 'center' },
+  body: { fontSize: 14, color: colors.textMuted, textAlign: 'center' },
+  link: { fontSize: 15, fontWeight: '600', color: colors.primary, marginTop: 8 },
+});
