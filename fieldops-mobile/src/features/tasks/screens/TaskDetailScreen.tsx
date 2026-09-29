@@ -1,27 +1,39 @@
 import { withObservables } from '@nozbe/watermelondb/react';
 import { Q } from '@nozbe/watermelondb';
-import { useEffect } from 'react';
-import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { of } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
+import { Icon, type IconName } from '../../../components/ui/Icon';
+import { HeaderIconButton, ScreenHeader } from '../../../components/ui/ScreenHeader';
+import { Badge, Card, EmptyState, IconBubble } from '../../../components/ui/primitives';
 import { database } from '../../../lib/db/database';
-import { colors } from '../../../theme/colors';
-import { originLabel, priorityLabel, statusLabel } from '../utils/statusLabels';
+import { toneColors } from '../../../theme/palette';
+import { makeStyles, useTheme } from '../../../theme/ThemeProvider';
+import { useSessionStore } from '../../auth/store/session.store';
+import { LeafletMap } from '../../map/components/LeafletMap';
+import { taskPosition } from '../../map/utils/geo';
 import { ChecklistCard } from '../components/ChecklistCard';
 import { HistorySection } from '../components/HistorySection';
 import { NotesSection } from '../components/NotesSection';
 import { PhotosSection } from '../components/PhotosSection';
 import { TransitionButtons } from '../components/TransitionButtons';
 import { useAvailableTransitions } from '../hooks/useAvailableTransitions';
+import { originLabel, priorityLabel, statusLabel } from '../utils/statusLabels';
+import { formatWhen, priorityTone, statusTone, taskTypeIcon } from '../utils/taskVisuals';
 import type { Task as TaskModel } from '../db/models/Task';
 import type { PhotoType } from '../../../lib/api/types';
 import type { TaskStackScreenProps } from '../../../navigation/types';
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoLine({ icon, text, sub }: { icon: IconName; text: string; sub?: string | null }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
+    <View style={styles.infoLine}>
+      <Icon name={icon} size={18} color={colors.textMuted} />
+      <View style={styles.infoTexts}>
+        <Text style={styles.infoText}>{text}</Text>
+        {sub ? <Text style={styles.infoSub}>{sub}</Text> : null}
+      </View>
     </View>
   );
 }
@@ -31,113 +43,155 @@ interface Props extends TaskStackScreenProps<'TaskDetail'> {
 }
 
 function TaskDetailScreenBase({ task, navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const user = useSessionStore((s) => s.user);
   const transitions = useAvailableTransitions(task);
   const requiredTypes = [...new Set(transitions.flatMap((t) => t.requiredPhotos))] as PhotoType[];
   const requiresSignature = transitions.some((t) => t.requiresSignature);
-  const site = task?.site;
-  const hasContactInfo = !!(site?.contactName || site?.contactPhone || site?.accessInstructions);
 
-  useEffect(() => {
-    if (task) navigation.setOptions({ title: task.reference });
-  }, [task, navigation]);
+  const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('TaskList'));
 
   if (!task) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.emptyText}>Intervention introuvable localement.</Text>
+      <View style={styles.container}>
+        <ScreenHeader title="Détail intervention" onBack={goBack} />
+        <EmptyState icon="search-off" title="Intervention introuvable localement." hint="Synchronisez pour la récupérer." />
       </View>
     );
   }
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {task.localStatus === 'pending' && (
-        <View style={styles.pendingBanner}>
-          <Text style={styles.pendingBannerText}>Modifications en attente de synchronisation</Text>
-        </View>
-      )}
+  const site = task.site;
+  const position = taskPosition(task);
+  const agentName = task.agentId && task.agentId === user?.id ? `${user.firstName} ${user.lastName}` : task.agentId ? 'Autre agent' : 'Non affectée';
+  const showOnMap = () => navigation.navigate('Map', { focusTaskId: task.serverId });
 
-      <View style={styles.card}>
-        <Text style={styles.title}>{task.title}</Text>
-        {task.description ? <Text style={styles.description}>{task.description}</Text> : null}
-        {originLabel(task.origin) || task.isRework ? (
-          <View style={styles.badges}>
-            {originLabel(task.origin) ? (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{originLabel(task.origin)}</Text>
-              </View>
-            ) : null}
-            {task.isRework ? (
-              <View style={[styles.badge, styles.badgeDanger]}>
-                <Text style={[styles.badgeText, styles.badgeDangerText]}>Réintervention</Text>
-              </View>
-            ) : null}
+  const openMenu = () => {
+    const actions: { text: string; onPress?: () => void; style?: 'cancel' }[] = [];
+    if (position) actions.push({ text: 'Voir sur la carte', onPress: showOnMap });
+    if (position)
+      actions.push({
+        text: 'Itinéraire',
+        onPress: () => Linking.openURL(`geo:${position.lat},${position.lng}?q=${position.lat},${position.lng}(${encodeURIComponent(site?.name ?? '')})`),
+      });
+    if (site?.contactPhone) actions.push({ text: `Appeler ${site.contactName ?? 'le contact'}`, onPress: () => Linking.openURL(`tel:${site.contactPhone}`) });
+    actions.push({ text: 'Fermer', style: 'cancel' });
+    Alert.alert(`#${task.reference}`, task.title, actions);
+  };
+
+  return (
+    <View style={styles.container}>
+      <ScreenHeader title="Détail intervention" onBack={goBack} right={<HeaderIconButton icon="more-vert" onPress={openMenu} />} />
+      <ScrollView contentContainerStyle={styles.content}>
+        {task.localStatus === 'pending' ? (
+          <View style={[styles.pending, { backgroundColor: toneColors(colors, 'warning').bg }]}>
+            <Icon name="cloud-upload" size={16} color={colors.warning} />
+            <Text style={[styles.pendingText, { color: colors.warning }]}>Modifications en attente de synchronisation</Text>
           </View>
         ) : null}
-        <InfoRow label="Statut" value={statusLabel(task.status)} />
-        <InfoRow label="Priorité" value={priorityLabel(task.priority)} />
-        <InfoRow label="Type" value={task.type} />
-        <InfoRow label="Site" value={task.site?.name ?? '—'} />
-        <InfoRow label="Adresse" value={task.site?.address ?? '—'} />
-        <InfoRow label="Client" value={task.client?.name ?? '—'} />
-      </View>
 
-      {task.asset ? (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Équipement</Text>
-          <InfoRow label="Équipement" value={task.asset.name} />
-          {task.asset.location ? <InfoRow label="Emplacement" value={task.asset.location} /> : null}
-          {task.asset.brand || task.asset.model ? (
-            <InfoRow label="Modèle" value={[task.asset.brand, task.asset.model].filter(Boolean).join(' · ')} />
-          ) : null}
-          {task.asset.serialNumber ? <InfoRow label="N° de série" value={task.asset.serialNumber} /> : null}
-          {transitions.some((t) => t.requiresAssetScan) ? (
-            <Text style={styles.hint}>Le QR code de l&apos;équipement vous sera demandé pour démarrer l&apos;intervention.</Text>
-          ) : null}
-        </View>
-      ) : null}
+        <Card style={styles.summary}>
+          <View style={styles.summaryTop}>
+            <IconBubble name={taskTypeIcon(task.type)} tone={priorityTone(task.priority)} size={36} />
+            <Text style={styles.reference}>#{task.reference}</Text>
+            <Badge label={priorityLabel(task.priority)} tone={priorityTone(task.priority)} solid />
+          </View>
+          <Text style={styles.title}>{task.title}</Text>
+          <View style={styles.badges}>
+            <Badge label={statusLabel(task.status)} tone={statusTone(task.status)} />
+            {originLabel(task.origin) ? <Badge label={originLabel(task.origin) as string} tone="muted" /> : null}
+            {task.isRework ? <Badge label="Réintervention" tone="danger" /> : null}
+          </View>
+          <View style={styles.lines}>
+            <InfoLine icon="place" text={site?.name ?? '—'} sub={site?.address} />
+            <InfoLine icon="event" text={formatWhen(task.scheduledStart)} />
+            <InfoLine icon="person-outline" text={`Agent : ${agentName}`} />
+            <InfoLine icon="business" text={task.client?.name ?? '—'} />
+          </View>
+        </Card>
 
-      {hasContactInfo && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Contact sur site</Text>
-          {site?.contactName ? <InfoRow label="Nom" value={site.contactName} /> : null}
-          {site?.contactPhone ? (
-            <TouchableOpacity onPress={() => Linking.openURL(`tel:${site.contactPhone}`)}>
-              <InfoRow label="Téléphone" value={site.contactPhone} />
+        {task.description ? (
+          <Card style={styles.block}>
+            <Text style={styles.blockTitle}>Description</Text>
+            <Text style={styles.body}>{task.description}</Text>
+          </Card>
+        ) : null}
+
+        {position ? (
+          <Card style={styles.mapCard}>
+            <LeafletMap
+              interactive={false}
+              style={styles.miniMap}
+              markers={[
+                {
+                  id: task.serverId,
+                  lat: position.lat,
+                  lng: position.lng,
+                  color: toneColors(colors, priorityTone(task.priority)).fg,
+                  title: task.reference,
+                },
+              ]}
+            />
+            <TouchableOpacity style={styles.mapLink} onPress={showOnMap}>
+              <Icon name="map" size={18} color={colors.primary} />
+              <Text style={styles.mapLinkText}>Voir sur la carte</Text>
             </TouchableOpacity>
-          ) : null}
-          {site?.accessInstructions ? (
-            <View style={styles.accessInstructions}>
-              <Text style={styles.infoLabel}>Accès</Text>
-              <Text style={styles.description}>{site.accessInstructions}</Text>
-            </View>
-          ) : null}
-        </View>
-      )}
+          </Card>
+        ) : null}
 
-      <TransitionButtons task={task} transitions={transitions} />
+        {task.asset ? (
+          <Card style={styles.block}>
+            <Text style={styles.blockTitle}>Équipement</Text>
+            <InfoLine icon="precision-manufacturing" text={task.asset.name} sub={task.asset.location} />
+            {task.asset.brand || task.asset.model ? (
+              <InfoLine icon="info-outline" text={[task.asset.brand, task.asset.model].filter(Boolean).join(' · ')} sub={task.asset.serialNumber ? `N° ${task.asset.serialNumber}` : null} />
+            ) : null}
+            {transitions.some((t) => t.requiresAssetScan) ? (
+              <View style={[styles.hint, { backgroundColor: colors.primarySoft }]}>
+                <Icon name="qr-code-scanner" size={18} color={colors.primary} />
+                <Text style={[styles.hintText, { color: colors.primary }]}>Le QR code de l&apos;équipement sera demandé pour démarrer.</Text>
+              </View>
+            ) : null}
+          </Card>
+        ) : null}
 
-      <PhotosSection
-        task={task}
-        requiredTypes={requiredTypes}
-        requiresSignature={requiresSignature}
-        onAddPhoto={(type: PhotoType) => navigation.navigate('PhotoCapture', { taskId: task.serverId, type })}
-        onSign={() => navigation.navigate('Signature', { taskId: task.serverId })}
-      />
+        {site?.contactName || site?.contactPhone || site?.accessInstructions ? (
+          <Card style={styles.block}>
+            <Text style={styles.blockTitle}>Contact sur site</Text>
+            {site.contactName ? <InfoLine icon="badge" text={site.contactName} /> : null}
+            {site.contactPhone ? (
+              <TouchableOpacity onPress={() => Linking.openURL(`tel:${site.contactPhone}`)}>
+                <InfoLine icon="call" text={site.contactPhone} />
+              </TouchableOpacity>
+            ) : null}
+            {site.accessInstructions ? <InfoLine icon="vpn-key" text={site.accessInstructions} /> : null}
+          </Card>
+        ) : null}
 
-      <ChecklistCard task={task} />
+        <ChecklistCard task={task} />
 
-      <NotesSection task={task} />
+        <PhotosSection
+          task={task}
+          requiredTypes={requiredTypes}
+          requiresSignature={requiresSignature}
+          onAddPhoto={(type: PhotoType) => navigation.navigate('PhotoCapture', { taskId: task.serverId, type })}
+          onSign={() => navigation.navigate('Signature', { taskId: task.serverId })}
+        />
 
-      <HistorySection task={task} />
+        <TransitionButtons task={task} transitions={transitions} />
 
-      {task.completionNotes ? (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Notes de clôture</Text>
-          <Text style={styles.description}>{task.completionNotes}</Text>
-        </View>
-      ) : null}
-    </ScrollView>
+        <NotesSection task={task} />
+
+        <HistorySection task={task} />
+
+        {task.completionNotes ? (
+          <Card style={styles.block}>
+            <Text style={styles.blockTitle}>Notes de clôture</Text>
+            <Text style={styles.body}>{task.completionNotes}</Text>
+          </Card>
+        ) : null}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -155,37 +209,30 @@ const enhance = withObservables(['route'], ({ route }: TaskStackScreenProps<'Tas
 
 export const TaskDetailScreen = enhance(TaskDetailScreenBase);
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 16, gap: 12 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
-  emptyText: { color: colors.textMuted, fontSize: 15 },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  badge: { backgroundColor: '#EEF2FF', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { color: colors.primary, fontSize: 12, fontWeight: '600' },
-  badgeDanger: { backgroundColor: '#FEE2E2' },
-  badgeDangerText: { color: colors.danger },
-  hint: { color: colors.textMuted, fontSize: 12, marginTop: 6 },
-  pendingBanner: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  pendingBannerText: { color: colors.warning, fontSize: 13, fontWeight: '600', textAlign: 'center' },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 8,
-  },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 4 },
-  title: { fontSize: 20, fontWeight: '700', color: colors.text },
-  description: { fontSize: 14, color: colors.textMuted },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 },
-  infoLabel: { fontSize: 13, color: colors.textMuted },
-  infoValue: { fontSize: 13, color: colors.text, fontWeight: '600', flexShrink: 1, textAlign: 'right' },
-  accessInstructions: { paddingTop: 4, gap: 2 },
-});
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    content: { paddingHorizontal: 16, paddingBottom: 32, gap: 12 },
+    pending: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 },
+    pendingText: { fontSize: 13, fontWeight: '600' },
+    summary: { gap: 10 },
+    summaryTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    reference: { flex: 1, fontSize: 16, fontWeight: '700', color: c.text },
+    title: { fontSize: 20, fontWeight: '700', color: c.text },
+    badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    lines: { gap: 10, marginTop: 4 },
+    infoLine: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+    infoTexts: { flex: 1 },
+    infoText: { fontSize: 14, color: c.text },
+    infoSub: { fontSize: 12, color: c.textMuted, marginTop: 1 },
+    block: { gap: 10 },
+    blockTitle: { fontSize: 15, fontWeight: '700', color: c.text },
+    body: { fontSize: 14, color: c.textMuted, lineHeight: 20 },
+    mapCard: { padding: 0, overflow: 'hidden' },
+    miniMap: { height: 150 },
+    mapLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12 },
+    mapLinkText: { fontSize: 14, fontWeight: '600', color: c.primary },
+    hint: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, padding: 10 },
+    hintText: { flex: 1, fontSize: 12, fontWeight: '600' },
+  }),
+);

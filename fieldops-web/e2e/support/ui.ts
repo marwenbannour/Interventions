@@ -11,8 +11,9 @@ export async function loginAs(page: Page, account: AccountKey, path = '/dispatch
   const res = await page.request.post('/api/auth/login', { data: { email, password } });
   expect(res.ok(), `connexion ${email} : HTTP ${res.status()}`).toBeTruthy();
   await page.goto(path);
-  // Le shell n'est rendu qu'une fois la session reconstituée depuis le cookie (silent refresh).
-  await expect(page.locator('header')).toContainText(roleLabel);
+  // Le shell n'est rendu qu'une fois la session reconstituée depuis le cookie (silent refresh) ;
+  // la carte utilisateur de la barre latérale affiche alors le rôle.
+  await expect(page.getByTestId('sidebar-user')).toContainText(roleLabel);
 }
 
 export async function loginViaForm(page: Page, email: string, password: string) {
@@ -26,7 +27,8 @@ export const sidebar = (page: Page) => page.locator('aside nav');
 
 /** Navigation côté client (sans rechargement, donc sans nouvel appel de refresh). */
 export async function navigate(page: Page, label: string, expectedPath: string | RegExp) {
-  await sidebar(page).getByRole('link', { name: label, exact: true }).click();
+  // Préfixe : le lien Notifications inclut le compteur de non-lues dans son nom accessible.
+  await sidebar(page).getByRole('link', { name: new RegExp(`^${label}`) }).click();
   await expect(page).toHaveURL(expectedPath);
 }
 

@@ -4,17 +4,26 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { getMeta, setMeta } from '../../sync/db/syncMetaRepository';
 import { notificationsApi } from '../api/notifications.api';
+import { usePreferencesStore } from '../../settings/store/preferences.store';
 import type { DevicePlatform } from '../../../lib/api/types';
 
 const LAST_TOKEN_KEY = 'lastRegisteredPushToken';
 
+/** Catégorie de préférence (écran Paramètres) d'un type de notification serveur. */
+function isMutedByPreferences(type: unknown): boolean {
+  const prefs = usePreferencesStore.getState();
+  if (type === 'TASK_ASSIGNED') return !prefs.notifyNewTasks;
+  if (typeof type === 'string' && type.startsWith('SLA_')) return !prefs.notifyReminders;
+  if (type === 'MANUAL') return !prefs.notifyMessages;
+  return false;
+}
+
+// App au premier plan : les catégories désactivées restent dans la liste in-app, sans bannière ni son.
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
+  handleNotification: async (notification) => {
+    const muted = isMutedByPreferences(notification.request.content.data?.type);
+    return { shouldShowBanner: !muted, shouldShowList: true, shouldPlaySound: !muted, shouldSetBadge: true };
+  },
 });
 
 function currentPlatform(): DevicePlatform {

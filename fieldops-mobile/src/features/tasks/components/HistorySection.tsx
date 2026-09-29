@@ -1,6 +1,8 @@
 import { withObservables } from '@nozbe/watermelondb/react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { colors } from '../../../theme/colors';
+import { Icon } from '../../../components/ui/Icon';
+import { Card } from '../../../components/ui/primitives';
+import { makeStyles, useTheme } from '../../../theme/ThemeProvider';
 import { observePendingNotes } from '../db/taskNoteRepository';
 import { useTaskHistory } from '../hooks/useTaskHistory';
 import { eventSummary } from '../utils/eventLabels';
@@ -14,84 +16,71 @@ const formatter = new Intl.DateTimeFormat('fr-FR', {
   minute: '2-digit',
 });
 
-function formatDateTime(iso: string): string {
-  return formatter.format(new Date(iso));
-}
-
 interface Props {
   task: TaskModel;
   notes: TaskNotePending[];
 }
 
 function HistorySectionBase({ task, notes }: Props) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { data: events, isLoading, isError, refetch, isRefetching } = useTaskHistory(task.serverId);
-  const sorted = [...(events ?? [])].sort(
-    (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
-  );
+  const sorted = [...(events ?? [])].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
 
   return (
-    <View style={styles.card}>
+    <Card style={styles.card}>
       <View style={styles.headerRow}>
         <Text style={styles.cardTitle}>Historique</Text>
-        <TouchableOpacity onPress={() => refetch()} disabled={isRefetching}>
-          {isRefetching ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Text style={styles.refreshText}>Actualiser</Text>
-          )}
+        <TouchableOpacity onPress={() => refetch()} disabled={isRefetching} hitSlop={8}>
+          {isRefetching ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon name="refresh" size={20} color={colors.primary} />}
         </TouchableOpacity>
       </View>
 
       {notes.map((note) => (
-        <View key={note.id} style={styles.eventRow}>
-          <Text style={styles.eventSummary}>{note.text}</Text>
-          <Text style={styles.eventPending}>en attente d’envoi</Text>
+        <View key={note.id} style={styles.event}>
+          <View style={[styles.dot, { backgroundColor: colors.warning }]} />
+          <View style={styles.eventBody}>
+            <Text style={styles.summary}>{note.text}</Text>
+            <Text style={[styles.meta, { color: colors.warning }]}>en attente d’envoi</Text>
+          </View>
         </View>
       ))}
 
-      {isLoading && <ActivityIndicator style={styles.loading} color={colors.primary} />}
-      {isError && <Text style={styles.errorText}>Historique indisponible hors ligne</Text>}
+      {isLoading ? <ActivityIndicator style={styles.loading} color={colors.primary} /> : null}
+      {isError ? <Text style={[styles.meta, { color: colors.warning }]}>Historique indisponible hors ligne</Text> : null}
 
-      {sorted.map((event) => (
-        <View key={event.id} style={styles.eventRow}>
-          <Text style={styles.eventSummary}>{eventSummary(event)}</Text>
-          <Text style={styles.eventMeta}>
-            {event.actorName ? `${event.actorName} · ` : ''}
-            {formatDateTime(event.occurredAt)}
-          </Text>
+      {sorted.map((event, index) => (
+        <View key={event.id} style={styles.event}>
+          <View style={[styles.dot, { backgroundColor: index === 0 ? colors.primary : colors.border }]} />
+          <View style={styles.eventBody}>
+            <Text style={styles.summary}>{eventSummary(event)}</Text>
+            <Text style={styles.meta}>
+              {event.actorName ? `${event.actorName} · ` : ''}
+              {formatter.format(new Date(event.occurredAt))}
+            </Text>
+          </View>
         </View>
       ))}
 
-      {!isLoading && !isError && sorted.length === 0 && notes.length === 0 && (
-        <Text style={styles.emptyText}>Aucun historique</Text>
-      )}
-    </View>
+      {!isLoading && !isError && sorted.length === 0 && notes.length === 0 ? <Text style={styles.meta}>Aucun historique</Text> : null}
+    </Card>
   );
 }
 
-const enhance = withObservables(['task'], ({ task }: { task: TaskModel }) => ({
+export const HistorySection = withObservables(['task'], ({ task }: { task: TaskModel }) => ({
   notes: observePendingNotes(task.serverId),
-}));
+}))(HistorySectionBase);
 
-export const HistorySection = enhance(HistorySectionBase);
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 4,
-  },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-  refreshText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
-  loading: { marginVertical: 8 },
-  errorText: { fontSize: 13, color: colors.warning, paddingVertical: 6 },
-  eventRow: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border },
-  eventSummary: { fontSize: 14, color: colors.text },
-  eventMeta: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
-  eventPending: { fontSize: 11, color: colors.warning, marginTop: 2 },
-  emptyText: { fontSize: 13, color: colors.textMuted, paddingVertical: 4 },
-});
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    card: { gap: 4 },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+    cardTitle: { fontSize: 15, fontWeight: '700', color: c.text },
+    loading: { marginVertical: 8 },
+    event: { flexDirection: 'row', gap: 12, paddingVertical: 6 },
+    dot: { width: 10, height: 10, borderRadius: 5, marginTop: 5 },
+    eventBody: { flex: 1 },
+    summary: { fontSize: 14, color: c.text },
+    meta: { fontSize: 11, color: c.textMuted, marginTop: 2 },
+  }),
+);

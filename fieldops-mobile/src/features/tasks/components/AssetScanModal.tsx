@@ -1,7 +1,11 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { useRef, useState } from 'react';
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { colors } from '../../../theme/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Icon } from '../../../components/ui/Icon';
+import { Button } from '../../../components/ui/primitives';
+import { radius } from '../../../theme/palette';
+import { makeStyles, useTheme } from '../../../theme/ThemeProvider';
 import type { AssetSnapshot } from '../../../lib/api/types';
 
 interface Props {
@@ -17,6 +21,9 @@ interface Props {
  * serveur trace le mode de saisie (QR ou manuel) dans l'historique.
  */
 export function AssetScanModal({ visible, asset, onScanned, onCancel }: Props) {
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [permission, requestPermission] = useCameraPermissions();
   const [manual, setManual] = useState(false);
   const [code, setCode] = useState('');
@@ -43,8 +50,14 @@ export function AssetScanModal({ visible, asset, onScanned, onCancel }: Props) {
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={cancel} onShow={() => (handled.current = false)}>
-      <View style={styles.container}>
-        <Text style={styles.title}>Scanner l&apos;équipement</Text>
+      <View style={[styles.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={cancel} hitSlop={10}>
+            <Icon name="close" size={26} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.title}>Scanner l&apos;équipement</Text>
+          <View style={{ width: 26 }} />
+        </View>
         {asset ? (
           <Text style={styles.subtitle}>
             {asset.name}
@@ -66,12 +79,9 @@ export function AssetScanModal({ visible, asset, onScanned, onCancel }: Props) {
 
         {!manual && permission && !permission.granted ? (
           <View style={styles.permissionBox}>
+            <Icon name="no-photography" size={40} color={colors.textMuted} />
             <Text style={styles.subtitle}>L&apos;accès à la caméra est nécessaire pour scanner le QR code.</Text>
-            {permission.canAskAgain ? (
-              <TouchableOpacity style={styles.primary} onPress={requestPermission}>
-                <Text style={styles.primaryText}>Autoriser la caméra</Text>
-              </TouchableOpacity>
-            ) : null}
+            {permission.canAskAgain ? <Button label="Autoriser la caméra" onPress={requestPermission} /> : null}
           </View>
         ) : null}
 
@@ -86,54 +96,60 @@ export function AssetScanModal({ visible, asset, onScanned, onCancel }: Props) {
               autoCorrect={false}
               autoFocus
               placeholder="EQ-…"
+              placeholderTextColor={colors.textMuted}
             />
-            <TouchableOpacity
-              style={[styles.primary, code.trim().length < 3 && styles.disabled]}
+            <Button
+              label="Valider"
               disabled={code.trim().length < 3}
               onPress={() => {
                 onScanned(code.trim());
                 reset();
               }}
-            >
-              <Text style={styles.primaryText}>Valider</Text>
-            </TouchableOpacity>
+            />
           </View>
         ) : (
           <TouchableOpacity onPress={() => setManual(true)} style={styles.link}>
+            <Icon name="keyboard" size={18} color={colors.primary} />
             <Text style={styles.linkText}>Étiquette illisible ? Saisir le code</Text>
           </TouchableOpacity>
         )}
-
-        <TouchableOpacity onPress={cancel} style={styles.cancel}>
-          <Text style={styles.cancelText}>Annuler</Text>
-        </TouchableOpacity>
       </View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: 20, paddingTop: 60, gap: 16 },
-  title: { fontSize: 20, fontWeight: '700', color: colors.text, textAlign: 'center' },
-  subtitle: { fontSize: 14, color: colors.textMuted, textAlign: 'center' },
-  cameraFrame: { aspectRatio: 1, borderRadius: 16, overflow: 'hidden', backgroundColor: '#000' },
-  camera: { flex: 1 },
-  reticle: {
-    position: 'absolute', top: '20%', left: '20%', width: '60%', height: '60%',
-    borderWidth: 3, borderColor: '#FFFFFF', borderRadius: 16,
-  },
-  permissionBox: { gap: 12, alignItems: 'center', paddingVertical: 24 },
-  manualBox: { gap: 10 },
-  label: { fontSize: 13, color: colors.textMuted },
-  input: {
-    borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, fontSize: 16,
-    color: colors.text, backgroundColor: colors.surface, letterSpacing: 1,
-  },
-  primary: { backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 13, alignItems: 'center', paddingHorizontal: 18 },
-  primaryText: { color: colors.primaryText, fontSize: 15, fontWeight: '600' },
-  disabled: { opacity: 0.4 },
-  link: { alignItems: 'center', paddingVertical: 8 },
-  linkText: { color: colors.primary, fontSize: 14, fontWeight: '500' },
-  cancel: { alignItems: 'center', paddingVertical: 10, marginTop: 'auto' },
-  cancelText: { color: colors.textMuted, fontSize: 15 },
-});
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background, paddingHorizontal: 20, gap: 16 },
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    title: { fontSize: 18, fontWeight: '700', color: c.text },
+    subtitle: { fontSize: 14, color: c.textMuted, textAlign: 'center' },
+    cameraFrame: { aspectRatio: 1, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: '#000' },
+    camera: { flex: 1 },
+    reticle: {
+      position: 'absolute',
+      top: '20%',
+      left: '20%',
+      width: '60%',
+      height: '60%',
+      borderWidth: 3,
+      borderColor: '#FFFFFF',
+      borderRadius: radius.lg,
+    },
+    permissionBox: { gap: 12, alignItems: 'center', paddingVertical: 24 },
+    manualBox: { gap: 10 },
+    label: { fontSize: 13, color: c.textMuted },
+    input: {
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: radius.md,
+      padding: 12,
+      fontSize: 16,
+      color: c.text,
+      backgroundColor: c.surface,
+      letterSpacing: 1,
+    },
+    link: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8 },
+    linkText: { color: c.primary, fontSize: 14, fontWeight: '600' },
+  }),
+);

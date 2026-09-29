@@ -17,7 +17,7 @@ export function proxy(request: NextRequest) {
 
   if (hasSession && isPublic) {
     const url = request.nextUrl.clone();
-    url.pathname = '/dispatch';
+    url.pathname = '/accueil';
     return NextResponse.redirect(url);
   }
 

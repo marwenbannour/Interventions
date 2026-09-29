@@ -1,6 +1,9 @@
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { colors } from '../../../theme/colors';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Button, IconBubble } from '../../../components/ui/primitives';
+import { ScreenHeader } from '../../../components/ui/ScreenHeader';
+import { radius } from '../../../theme/palette';
+import { makeStyles, useTheme } from '../../../theme/ThemeProvider';
 import { secureStorage } from '../../../lib/secureStorage';
 import { ApiError } from '../../../lib/api/errors';
 import { authApi } from '../api/auth.api';
@@ -12,8 +15,10 @@ const CHANNEL_LABEL: Record<'EMAIL' | 'SMS', string> = {
   SMS: 'SMS',
 };
 
-export function OtpScreen({ route }: AuthStackScreenProps<'Otp'>) {
+export function OtpScreen({ route, navigation }: AuthStackScreenProps<'Otp'>) {
   const { mfaToken, channel } = route.params;
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [code, setCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,51 +44,47 @@ export function OtpScreen({ route }: AuthStackScreenProps<'Otp'>) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Vérification</Text>
-      <Text style={styles.subtitle}>
-        Un code à 6 chiffres a été envoyé par {CHANNEL_LABEL[channel]}.
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="000000"
-        keyboardType="number-pad"
-        maxLength={6}
-        value={code}
-        onChangeText={(t) => setCode(t.replace(/[^0-9]/g, ''))}
-        editable={!submitting}
-        autoFocus
-      />
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      <TouchableOpacity
-        style={[styles.button, submitting && styles.buttonDisabled]}
-        onPress={onSubmit}
-        disabled={submitting}
-      >
-        {submitting ? <ActivityIndicator color={colors.primaryText} /> : <Text style={styles.buttonText}>Valider</Text>}
-      </TouchableOpacity>
+      <ScreenHeader title="Vérification" onBack={() => navigation.goBack()} />
+      <View style={styles.content}>
+        <View style={styles.center}>
+          <IconBubble name="verified-user" tone="primary" size={72} />
+        </View>
+        <Text style={styles.subtitle}>Un code à 6 chiffres a été envoyé par {CHANNEL_LABEL[channel]}.</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="000000"
+          placeholderTextColor={colors.textMuted}
+          keyboardType="number-pad"
+          maxLength={6}
+          value={code}
+          onChangeText={(t) => setCode(t.replace(/[^0-9]/g, ''))}
+          editable={!submitting}
+          autoFocus
+        />
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <Button label="Valider" onPress={onSubmit} loading={submitting} />
+      </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, justifyContent: 'center', paddingHorizontal: 24, gap: 12 },
-  title: { fontSize: 26, fontWeight: '700', color: colors.text, textAlign: 'center' },
-  subtitle: { fontSize: 15, color: colors.textMuted, textAlign: 'center', marginBottom: 16 },
-  input: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingVertical: 14,
-    fontSize: 28,
-    letterSpacing: 8,
-    textAlign: 'center',
-    color: colors.text,
-  },
-  error: { color: colors.danger, fontSize: 14, textAlign: 'center' },
-  button: { backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: colors.primaryText, fontSize: 16, fontWeight: '600' },
-});
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    content: { flex: 1, paddingHorizontal: 24, paddingTop: 24, gap: 16 },
+    center: { alignItems: 'center' },
+    subtitle: { fontSize: 15, color: c.textMuted, textAlign: 'center' },
+    input: {
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: radius.md,
+      paddingVertical: 14,
+      fontSize: 28,
+      letterSpacing: 8,
+      textAlign: 'center',
+      color: c.text,
+    },
+    error: { color: c.danger, fontSize: 14, textAlign: 'center' },
+  }),
+);

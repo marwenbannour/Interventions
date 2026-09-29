@@ -18,7 +18,7 @@ export function AgentsView() {
   return (
     <div className="flex h-full flex-col gap-4">
       <div>
-        <h1 className="text-xl font-bold text-foreground">Agents</h1>
+        <h1 className="text-xl font-bold text-foreground">Carte des agents</h1>
         <p className="text-sm text-muted-foreground">
           {agentsLoading
             ? 'Chargement…'

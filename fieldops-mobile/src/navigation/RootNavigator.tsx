@@ -1,6 +1,8 @@
-import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
-import { useEffect } from 'react';
+import { DarkTheme, DefaultTheme, NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useMemo } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
+import { useTheme } from '../theme/ThemeProvider';
 import { registerForceLogoutHandler } from '../lib/api/client';
 import { useSilentRefresh } from '../features/auth/hooks/useSilentRefresh';
 import { useSessionStore } from '../features/auth/store/session.store';
@@ -49,10 +51,20 @@ export function RootNavigator() {
     if (status !== 'checking') SplashScreen.hideAsync().catch(() => undefined);
   }, [status]);
 
+  const { colors, isDark } = useTheme();
+  const navigationTheme = useMemo(() => {
+    const base = isDark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      colors: { ...base.colors, primary: colors.primary, background: colors.background, card: colors.surface, text: colors.text, border: colors.border },
+    };
+  }, [colors, isDark]);
+
   if (status === 'checking') return null;
 
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer ref={navigationRef} theme={navigationTheme}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       {status === 'authenticated' ? <AppTabs /> : <AuthStack />}
     </NavigationContainer>
   );

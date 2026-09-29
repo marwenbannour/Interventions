@@ -9,11 +9,7 @@ export function AuthStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen
-        name="Otp"
-        component={OtpScreen}
-        options={{ headerShown: true, title: 'Code de vérification' }}
-      />
+      <Stack.Screen name="Otp" component={OtpScreen} />
     </Stack.Navigator>
   );
 }

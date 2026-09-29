@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -27,6 +27,9 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-indigo: var(--indigo);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -49,75 +52,86 @@
 }
 
 :root {
-  /* Palette alignée sur l'app mobile agent (src/theme/colors.ts) pour cohérence de marque. */
-  --background: #F7F8FA;
-  --foreground: #111827;
+  /* Design system « Interventions » — identique à l'app mobile (src/theme/palette.ts). */
+  --background: #F8FAFC;
+  --foreground: #0F172A;
   --card: #FFFFFF;
-  --card-foreground: #111827;
+  --card-foreground: #0F172A;
   --popover: #FFFFFF;
-  --popover-foreground: #111827;
-  --primary: #1D4ED8;
+  --popover-foreground: #0F172A;
+  --primary: #2563EB;
   --primary-foreground: #FFFFFF;
-  --secondary: #EEF2FF;
+  --secondary: #DBEAFE;
   --secondary-foreground: #1D4ED8;
-  --muted: #F1F2F4;
-  --muted-foreground: #6B7280;
-  --accent: #EEF2FF;
+  --muted: #F1F5F9;
+  --muted-foreground: #64748B;
+  --accent: #EFF6FF;
   --accent-foreground: #1D4ED8;
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: #E5E7EB;
-  --input: #E5E7EB;
-  --ring: #1D4ED8;
+  --destructive: #DC2626;
+  --success: #16A34A;
+  --warning: #F59E0B;
+  --indigo: #4F46E5;
+  --border: #E2E8F0;
+  --input: #E2E8F0;
+  --ring: #2563EB;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
+  /* Barre latérale blanche, élément actif en bleu plein (maquette). */
   --sidebar: #FFFFFF;
-  --sidebar-foreground: #111827;
-  --sidebar-primary: #1D4ED8;
+  --sidebar-foreground: #0F172A;
+  --sidebar-primary: #2563EB;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #EEF2FF;
+  --sidebar-accent: #EFF6FF;
   --sidebar-accent-foreground: #1D4ED8;
-  --sidebar-border: #E5E7EB;
-  --sidebar-ring: #1D4ED8;
+  --sidebar-border: #E2E8F0;
+  --sidebar-ring: #2563EB;
 }
 
+/* Mode sombre (maquette) : fond bleu nuit, cartes légèrement plus claires, mêmes couleurs sémantiques. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #0B1220;
+  --foreground: #F1F5F9;
+  --card: #111A2E;
+  --card-foreground: #F1F5F9;
+  --popover: #16213A;
+  --popover-foreground: #F1F5F9;
+  --primary: #3B82F6;
+  --primary-foreground: #FFFFFF;
+  --secondary: rgba(59, 130, 246, 0.18);
+  --secondary-foreground: #93C5FD;
+  --muted: #1A2438;
+  --muted-foreground: #94A3B8;
+  --accent: rgba(59, 130, 246, 0.14);
+  --accent-foreground: #BFDBFE;
+  --destructive: #EF4444;
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --indigo: #6366F1;
+  --border: #1E293B;
+  --input: #1E293B;
+  --ring: #3B82F6;
+  --sidebar: #0E1627;
+  --sidebar-foreground: #E2E8F0;
+  --sidebar-primary: #2563EB;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: rgba(59, 130, 246, 0.14);
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #1E293B;
+  --sidebar-ring: #3B82F6;
+  color-scheme: dark;
 }
 
+/* Tuiles OpenStreetMap assombries en mode sombre (les repères gardent leurs couleurs). */
+.dark .leaflet-tile {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+}
+.dark .leaflet-container {
+  background: #0B1220;
+}
 @layer base {
   * {
     @apply border-border outline-ring/50;

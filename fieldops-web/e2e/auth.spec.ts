@@ -36,17 +36,19 @@ test.describe('Authentification', () => {
 
   test('connexion, session conservée au rechargement, puis déconnexion', async ({ page }) => {
     await loginViaForm(page, ACCOUNTS.supervisor.email, ACCOUNTS.supervisor.password);
-    await expect(page).toHaveURL(/\/dispatch$/);
-    await expect(page.locator('header')).toContainText('Superviseur');
-    await expect(page.getByRole('heading', { name: 'Dispatch' })).toBeVisible();
+    // Page d'accueil : tableau de bord.
+    await expect(page).toHaveURL(/\/accueil$/);
+    await expect(page.getByTestId('sidebar-user')).toContainText('Superviseur');
+    await expect(page.getByRole('heading', { name: 'Interventions urgentes' })).toBeVisible();
 
     // Rechargement : la session est reconstituée depuis le cookie httpOnly (silent refresh).
     await page.reload();
-    await expect(page.locator('header')).toContainText('Superviseur');
+    await expect(page.getByTestId('sidebar-user')).toContainText('Superviseur');
+    await expect(page.getByRole('heading', { name: 'Interventions urgentes' })).toBeVisible();
 
-    // Déjà connecté : /login renvoie vers le dispatch.
+    // Déjà connecté : /login renvoie vers l'accueil.
     await page.goto('/login');
-    await expect(page).toHaveURL(/\/dispatch$/);
+    await expect(page).toHaveURL(/\/accueil$/);
 
     await logout(page);
     await page.goto('/dispatch');
@@ -79,7 +81,8 @@ test.describe('Authentification', () => {
 
     await page.getByLabel('Code de vérification').fill(code);
     await page.getByRole('button', { name: 'Valider' }).click();
-    await expect(page).toHaveURL(/\/dispatch$/);
-    await expect(page.locator('header')).toContainText('Mfa E2E');
+    await expect(page).toHaveURL(/\/accueil$/);
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Bonjour, Mfa');
+    await expect(page.locator('aside')).toContainText('Mfa E2E');
   });
 });

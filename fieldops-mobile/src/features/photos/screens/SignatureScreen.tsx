@@ -1,14 +1,20 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SignatureCanvas, { type SignatureViewRef } from 'react-native-signature-canvas';
-import { colors } from '../../../theme/colors';
+import { ScreenHeader } from '../../../components/ui/ScreenHeader';
+import { Button, Field } from '../../../components/ui/primitives';
+import { radius } from '../../../theme/palette';
+import { makeStyles } from '../../../theme/ThemeProvider';
 import { enqueuePhoto } from '../db/photoQueueRepository';
 import { uploadQueue } from '../services/photoUploadQueue';
 import type { TaskStackScreenProps } from '../../../navigation/types';
 
 export function SignatureScreen({ route, navigation }: TaskStackScreenProps<'Signature'>) {
   const { taskId } = route.params;
+  const insets = useSafeAreaInsets();
+  const styles = useStyles();
   const canvasRef = useRef<SignatureViewRef>(null);
   const [signedByName, setSignedByName] = useState('');
 
@@ -32,31 +38,17 @@ export function SignatureScreen({ route, navigation }: TaskStackScreenProps<'Sig
 
   return (
     <View style={styles.container}>
-      <View style={styles.nameRow}>
-        <Text style={styles.label}>Nom du signataire</Text>
-        <TextInput
-          style={styles.nameInput}
-          value={signedByName}
-          onChangeText={setSignedByName}
-          placeholder="Nom complet"
-        />
+      <ScreenHeader title="Signature du client" onBack={() => navigation.goBack()} />
+      <View style={styles.name}>
+        <Field icon="person-outline" value={signedByName} onChangeText={setSignedByName} placeholder="Nom du signataire" />
       </View>
-      <SignatureCanvas
-        ref={canvasRef}
-        onOK={handleOK}
-        descriptionText="Signez ci-dessus"
-        webStyle={signatureWebStyle}
-      />
-      <View style={styles.actions}>
-        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.secondaryText}>Annuler</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryButton} onPress={() => canvasRef.current?.clearSignature()}>
-          <Text style={styles.secondaryText}>Effacer</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.primaryButton} onPress={() => canvasRef.current?.readSignature()}>
-          <Text style={styles.primaryText}>Valider</Text>
-        </TouchableOpacity>
+      <View style={styles.pad}>
+        {/* La zone de signature reste blanche, y compris en mode sombre (rendu fidèle au PDF). */}
+        <SignatureCanvas ref={canvasRef} onOK={handleOK} descriptionText="Signez ci-dessus" webStyle={signatureWebStyle} />
+      </View>
+      <View style={[styles.actions, { paddingBottom: insets.bottom + 16 }]}>
+        <Button label="Effacer" icon="backspace" variant="outline" onPress={() => canvasRef.current?.clearSignature()} style={styles.flex} />
+        <Button label="Valider" icon="check" onPress={() => canvasRef.current?.readSignature()} style={styles.flex} />
       </View>
     </View>
   );
@@ -68,23 +60,12 @@ const signatureWebStyle = `
   body,html { background-color: #fff; }
 `;
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  nameRow: { padding: 16, gap: 6 },
-  label: { fontSize: 13, color: colors.textMuted },
-  nameInput: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: colors.text,
-    backgroundColor: colors.surface,
-  },
-  actions: { flexDirection: 'row', gap: 10, padding: 16 },
-  secondaryButton: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  secondaryText: { color: colors.text, fontWeight: '600' },
-  primaryButton: { flex: 1, backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  primaryText: { color: colors.primaryText, fontWeight: '600' },
-});
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    name: { paddingHorizontal: 16, paddingBottom: 12 },
+    pad: { flex: 1, marginHorizontal: 16, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: c.border },
+    actions: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 16 },
+    flex: { flex: 1 },
+  }),
+);

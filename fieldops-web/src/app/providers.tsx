@@ -1,6 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider } from 'next-themes';
 import { useState } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { useSilentRefresh } from '@/features/auth/hooks/useSilentRefresh';
@@ -21,9 +22,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <SessionBootstrap>{children}</SessionBootstrap>
-      <Toaster richColors position="top-right" />
-    </QueryClientProvider>
+    // Thème clair/sombre sur la classe `dark` de <html>, mémorisé (localStorage) et appliqué avant le rendu.
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
+      <QueryClientProvider client={queryClient}>
+        <SessionBootstrap>{children}</SessionBootstrap>
+        <Toaster richColors position="top-right" />
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }

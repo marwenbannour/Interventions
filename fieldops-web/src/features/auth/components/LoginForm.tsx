@@ -39,7 +39,7 @@ export function LoginForm() {
         return;
       }
       setSession(result.accessToken, result.user);
-      router.push('/dispatch');
+      router.push('/accueil');
     } catch (error) {
       setServerError(error instanceof ApiError ? error.message : 'Connexion impossible. Vérifiez le réseau.');
     }

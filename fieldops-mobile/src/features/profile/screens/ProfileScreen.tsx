@@ -1,35 +1,32 @@
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { colors } from '../../../theme/colors';
-import { secureStorage } from '../../../lib/secureStorage';
-import { resetDatabase } from '../../../lib/db/database';
-import { authApi } from '../../auth/api/auth.api';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Avatar } from '../../../components/ui/Avatar';
+import { Icon } from '../../../components/ui/Icon';
+import { Button, Card, MenuRow } from '../../../components/ui/primitives';
+import { radius } from '../../../theme/palette';
+import { makeStyles, useTheme } from '../../../theme/ThemeProvider';
 import { useSessionStore } from '../../auth/store/session.store';
 import { useDutyStore } from '../../agents/store/duty.store';
 import { toggleDuty } from '../../agents/actions/dutyActions';
-import { stopBackgroundLocation } from '../../location/services/backgroundLocation';
-import { unregisterPushToken } from '../../notifications/services/pushRegistration';
-import { disconnectSocket } from '../../../lib/realtime/socket';
-import { ChangePasswordCard } from '../components/ChangePasswordCard';
-import { useAgentProfileQuery } from '../hooks/useAgentProfileQuery';
+import { logout } from '../actions/logout';
+import type { ProfileStackScreenProps } from '../../../navigation/types';
 
-export function ProfileScreen() {
+const ROLE_LABEL: Record<string, string> = {
+  AGENT: "Agent d'intervention",
+  SUPERVISOR: 'Superviseur',
+  ADMIN: 'Administrateur',
+  DIRECTION: 'Direction',
+  CLIENT: 'Client',
+};
+
+export function ProfileScreen({ navigation }: ProfileStackScreenProps<'ProfileHome'>) {
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useStyles();
   const user = useSessionStore((s) => s.user);
-  const clearSession = useSessionStore((s) => s.clearSession);
   const isOnDuty = useDutyStore((s) => s.isOnDuty);
   const agentStatus = useDutyStore((s) => s.status);
-  const { data: agentProfile } = useAgentProfileQuery(user?.role === 'AGENT');
   const [busy, setBusy] = useState<'logout' | 'logout-all' | null>(null);
   const [dutyBusy, setDutyBusy] = useState(false);
 
@@ -44,64 +41,45 @@ export function ProfileScreen() {
     }
   };
 
-  const logout = async () => {
-    setBusy('logout');
+  const doLogout = async (all: boolean) => {
+    setBusy(all ? 'logout-all' : 'logout');
     try {
-      const refreshToken = await secureStorage.getRefreshToken();
-      if (refreshToken) await authApi.logout({ refreshToken }).catch(() => undefined);
+      await logout(all);
     } finally {
-      await stopBackgroundLocation().catch(() => undefined);
-      await unregisterPushToken().catch(() => undefined);
-      disconnectSocket();
-      await secureStorage.clearRefreshToken().catch(() => undefined);
-      clearSession();
-      await resetDatabase().catch(() => undefined);
       setBusy(null);
     }
   };
 
-  const logoutAll = async () => {
-    setBusy('logout-all');
-    try {
-      await authApi.logoutAll().catch(() => undefined);
-    } finally {
-      await stopBackgroundLocation().catch(() => undefined);
-      await unregisterPushToken().catch(() => undefined);
-      disconnectSocket();
-      await secureStorage.clearRefreshToken().catch(() => undefined);
-      clearSession();
-      await resetDatabase().catch(() => undefined);
-      setBusy(null);
-    }
-  };
+  const confirmLogoutAll = () =>
+    Alert.alert('Déconnexion globale', 'Cela déconnectera tous vos appareils. Continuer ?', [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Confirmer', style: 'destructive', onPress: () => doLogout(true) },
+    ]);
 
-  const confirmLogoutAll = () => {
-    Alert.alert(
-      'Déconnexion globale',
-      'Cela déconnectera tous vos appareils. Continuer ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Confirmer', style: 'destructive', onPress: logoutAll },
-      ],
-    );
-  };
+  const dutyLocked = agentStatus !== null && agentStatus !== 'ACTIVE';
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={styles.flex} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <View style={styles.card}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={[styles.hero, { paddingTop: insets.top + 24 }]}>
+        <Avatar firstName={user?.firstName} lastName={user?.lastName} size={84} inverted />
         <Text style={styles.name}>
           {user?.firstName} {user?.lastName}
         </Text>
-        <Text style={styles.email}>{user?.email}</Text>
-        <Text style={styles.role}>{user?.role}</Text>
+        <Text style={styles.role}>{ROLE_LABEL[user?.role ?? ''] ?? user?.role}</Text>
+        <View style={styles.statusChip}>
+          <View style={[styles.statusDot, { backgroundColor: isOnDuty ? colors.success : '#CBD5E1' }]} />
+          <Text style={styles.statusText}>{isOnDuty ? 'En service' : 'Hors service'}</Text>
+        </View>
       </View>
 
-      <View style={styles.card}>
-        <View style={styles.dutyRow}>
-          <View>
+      <View style={styles.body}>
+        <Card style={styles.dutyCard}>
+          <Icon name="work-outline" size={22} color={colors.text} />
+          <View style={styles.dutyTexts}>
             <Text style={styles.dutyLabel}>En service</Text>
-            {agentStatus && agentStatus !== 'ACTIVE' && <Text style={styles.dutyHint}>Profil {agentStatus}</Text>}
+            <Text style={styles.dutyHint}>
+              {dutyLocked ? `Profil ${agentStatus === 'SUSPENDED' ? 'suspendu' : 'en attente de validation'}` : 'Active le suivi de position pour le dispatch'}
+            </Text>
           </View>
           {dutyBusy ? (
             <ActivityIndicator color={colors.primary} />
@@ -109,85 +87,70 @@ export function ProfileScreen() {
             <Switch
               value={isOnDuty}
               onValueChange={onToggleDuty}
-              disabled={agentStatus !== null && agentStatus !== 'ACTIVE'}
+              disabled={dutyLocked}
+              trackColor={{ true: colors.success, false: colors.border }}
+              thumbColor="#FFFFFF"
             />
           )}
-        </View>
+        </Card>
+
+        <Card style={styles.menu}>
+          <MenuRow icon="person-outline" label="Mes informations" onPress={() => navigation.navigate('AgentInfo')} />
+          <View style={styles.separator} />
+          <MenuRow icon="event-note" label="Mes interventions" onPress={() => navigation.navigate('Tasks', { screen: 'TaskList' })} />
+          <View style={styles.separator} />
+          <MenuRow icon="bar-chart" label="Statistiques" onPress={() => navigation.navigate('Home')} />
+          <View style={styles.separator} />
+          <MenuRow icon="settings" label="Paramètres" onPress={() => navigation.navigate('Settings')} />
+        </Card>
+
+        <Button label="Déconnexion" icon="logout" variant="danger" loading={busy === 'logout'} disabled={busy !== null} onPress={() => doLogout(false)} />
+        <TouchableOpacity onPress={confirmLogoutAll} disabled={busy !== null} style={styles.logoutAll}>
+          {busy === 'logout-all' ? (
+            <ActivityIndicator color={colors.danger} />
+          ) : (
+            <Text style={styles.logoutAllText}>Déconnexion de tous les appareils</Text>
+          )}
+        </TouchableOpacity>
       </View>
-
-      {agentProfile && (
-        <View style={styles.card}>
-          {agentProfile.vehicle ? (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Véhicule</Text>
-              <Text style={styles.infoValue}>{agentProfile.vehicle}</Text>
-            </View>
-          ) : null}
-          {agentProfile.qualityScore ? (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Score qualité</Text>
-              <Text style={styles.infoValue}>{agentProfile.qualityScore}</Text>
-            </View>
-          ) : null}
-          {agentProfile.skills.length > 0 ? (
-            <View style={styles.skillsBlock}>
-              <Text style={styles.infoLabel}>Compétences</Text>
-              <View style={styles.skillsRow}>
-                {agentProfile.skills.map((skill) => (
-                  <View key={skill} style={styles.skillChip}>
-                    <Text style={styles.skillChipText}>{skill}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          ) : null}
-        </View>
-      )}
-
-      <ChangePasswordCard />
-
-      <TouchableOpacity style={styles.button} onPress={logout} disabled={busy !== null}>
-        {busy === 'logout' ? <ActivityIndicator color={colors.text} /> : <Text style={styles.buttonText}>Se déconnecter</Text>}
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.dangerButton} onPress={confirmLogoutAll} disabled={busy !== null}>
-        {busy === 'logout-all' ? (
-          <ActivityIndicator color={colors.danger} />
-        ) : (
-          <Text style={styles.dangerButtonText}>Déconnexion de tous les appareils</Text>
-        )}
-      </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
-  container: { padding: 20, gap: 16 },
-  card: { backgroundColor: colors.surface, borderRadius: 12, padding: 20, gap: 4, borderWidth: 1, borderColor: colors.border },
-  name: { fontSize: 20, fontWeight: '700', color: colors.text },
-  email: { fontSize: 14, color: colors.textMuted },
-  role: { fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', marginTop: 4 },
-  dutyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  dutyLabel: { fontSize: 16, fontWeight: '600', color: colors.text },
-  dutyHint: { fontSize: 12, color: colors.warning, marginTop: 2 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 },
-  infoLabel: { fontSize: 13, color: colors.textMuted },
-  infoValue: { fontSize: 13, color: colors.text, fontWeight: '600' },
-  skillsBlock: { paddingTop: 4, gap: 6 },
-  skillsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  skillChip: { backgroundColor: colors.background, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: colors.border },
-  skillChipText: { fontSize: 12, color: colors.text, fontWeight: '600' },
-  button: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  buttonText: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  dangerButton: { borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
-  dangerButtonText: { color: colors.danger, fontSize: 14, fontWeight: '600' },
-});
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    content: { paddingBottom: 32 },
+    hero: {
+      backgroundColor: c.primary,
+      alignItems: 'center',
+      paddingBottom: 36,
+      borderBottomLeftRadius: radius.xl + 8,
+      borderBottomRightRadius: radius.xl + 8,
+      gap: 4,
+    },
+    name: { color: '#FFFFFF', fontSize: 22, fontWeight: '700', marginTop: 10 },
+    role: { color: 'rgba(255,255,255,0.85)', fontSize: 14 },
+    statusChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: 'rgba(255,255,255,0.18)',
+      borderRadius: radius.pill,
+      paddingHorizontal: 12,
+      paddingVertical: 5,
+      marginTop: 8,
+    },
+    statusDot: { width: 8, height: 8, borderRadius: 4 },
+    statusText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+    body: { padding: 16, gap: 14, marginTop: -20 },
+    dutyCard: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    dutyTexts: { flex: 1 },
+    dutyLabel: { fontSize: 15, fontWeight: '600', color: c.text },
+    dutyHint: { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    menu: { padding: 0 },
+    separator: { height: 1, backgroundColor: c.border, marginLeft: 52 },
+    logoutAll: { alignItems: 'center', paddingVertical: 6 },
+    logoutAllText: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
+  }),
+);

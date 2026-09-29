@@ -39,7 +39,7 @@ export function OtpForm({ mfaToken, channel }: { mfaToken: string; channel: MfaC
     try {
       const result = await authApi.verifyOtp(mfaToken, values.code);
       setSession(result.accessToken, result.user);
-      router.push('/dispatch');
+      router.push('/accueil');
     } catch (error) {
       setServerError(error instanceof ApiError ? error.message : 'Vérification impossible. Vérifiez le réseau.');
     }

@@ -3,7 +3,10 @@ import { Directory, File, Paths } from 'expo-file-system';
 import * as Location from 'expo-location';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { colors } from '../../../theme/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Icon } from '../../../components/ui/Icon';
+import { Button, EmptyState } from '../../../components/ui/primitives';
+import { useTheme } from '../../../theme/ThemeProvider';
 import { enqueuePhoto } from '../db/photoQueueRepository';
 import { uploadQueue } from '../services/photoUploadQueue';
 import type { TaskStackScreenProps } from '../../../navigation/types';
@@ -26,6 +29,8 @@ async function getTagPosition(): Promise<{ lat: number; lng: number; accuracy: n
 
 export function PhotoCaptureScreen({ route, navigation }: TaskStackScreenProps<'PhotoCapture'>) {
   const { taskId, type } = route.params;
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [capturing, setCapturing] = useState(false);
@@ -66,11 +71,10 @@ export function PhotoCaptureScreen({ route, navigation }: TaskStackScreenProps<'
 
   if (!permission.granted) {
     return (
-      <View style={styles.permissionContainer}>
-        <Text style={styles.permissionText}>FieldOps a besoin d’accéder à la caméra.</Text>
-        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-          <Text style={styles.permissionButtonText}>Autoriser la caméra</Text>
-        </TouchableOpacity>
+      <View style={[styles.permissionContainer, { backgroundColor: colors.background }]}>
+        <EmptyState icon="no-photography" title="FieldOps a besoin d’accéder à la caméra." />
+        <Button label="Autoriser la caméra" icon="photo-camera" onPress={requestPermission} />
+        <Button label="Annuler" variant="ghost" onPress={() => navigation.goBack()} />
       </View>
     );
   }
@@ -78,12 +82,13 @@ export function PhotoCaptureScreen({ route, navigation }: TaskStackScreenProps<'
   return (
     <View style={styles.container}>
       <CameraView ref={cameraRef} style={styles.camera} facing="back" />
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { top: insets.top + 16 }]}>
+        <Icon name="photo-camera" size={16} color="#fff" />
         <Text style={styles.typeLabel}>{PHOTO_TYPE_LABEL[type] ?? type}</Text>
       </View>
-      <View style={styles.controls}>
+      <View style={[styles.controls, { bottom: insets.bottom + 32 }]}>
         <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()} disabled={capturing}>
-          <Text style={styles.cancelText}>Annuler</Text>
+          <Icon name="close" size={30} color="#fff" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.shutterButton} onPress={capture} disabled={capturing}>
           {capturing ? <ActivityIndicator color="#fff" /> : <View style={styles.shutterInner} />}
@@ -97,11 +102,20 @@ export function PhotoCaptureScreen({ route, navigation }: TaskStackScreenProps<'
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   camera: { flex: 1 },
-  overlay: { position: 'absolute', top: 50, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+  overlay: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
   typeLabel: { color: '#fff', fontSize: 14, fontWeight: '600' },
   controls: {
     position: 'absolute',
-    bottom: 32,
     left: 0,
     right: 0,
     flexDirection: 'row',
@@ -110,7 +124,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   cancelButton: { width: 70 },
-  cancelText: { color: '#fff', fontSize: 15 },
   shutterButton: {
     width: 72,
     height: 72,
@@ -121,8 +134,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   shutterInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#fff' },
-  permissionContainer: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
-  permissionText: { fontSize: 15, color: colors.text, textAlign: 'center' },
-  permissionButton: { backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 20 },
-  permissionButtonText: { color: colors.primaryText, fontWeight: '600' },
+  permissionContainer: { flex: 1, justifyContent: 'center', padding: 24, gap: 12 },
 });

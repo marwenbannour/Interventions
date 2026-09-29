@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import compression from 'compression';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { RedisIoAdapter } from './modules/realtime/redis-io.adapter';
@@ -25,6 +26,9 @@ async function bootstrap() {
 
   app.set('trust proxy', 1);
   app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+  // gzip des réponses (> 1 Ko) : les listes d'interventions JSON passent d'environ 130 Ko à une quinzaine,
+  // décisif pour l'app mobile en 4G et pour la sync hors-ligne.
+  app.use(compression({ threshold: 1024 }));
   const origins = cfg.get<string[]>('corsOrigins') ?? [];
   app.enableCors({ origin: origins.length ? origins : true, credentials: true });
   app.useBodyParser('json', { limit: '2mb' });

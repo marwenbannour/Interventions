@@ -20,8 +20,8 @@ function slaAtRisk(task: TaskListItem): boolean {
   return task.ackBreached || task.arrivalBreached || task.interventionBreached || task.closeBreached;
 }
 
-export function TasksTable() {
-  const [query, setQuery] = useState<TaskQuery>({ limit: 50 });
+export function TasksTable({ initialSearch }: { initialSearch?: string }) {
+  const [query, setQuery] = useState<TaskQuery>({ limit: 50, search: initialSearch });
   const { data, isLoading } = useTasksList(query);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 

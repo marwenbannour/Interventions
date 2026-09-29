@@ -1,84 +1,127 @@
-import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import { useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { colors } from '../../../theme/colors';
+import { HeaderIconButton, ScreenHeader } from '../../../components/ui/ScreenHeader';
+import { Card, EmptyState, IconBubble } from '../../../components/ui/primitives';
+import type { IconName } from '../../../components/ui/Icon';
+import { radius, type Tone } from '../../../theme/palette';
+import { makeStyles, useTheme } from '../../../theme/ThemeProvider';
+import { formatShortWhen } from '../../tasks/utils/taskVisuals';
 import { useMarkNotificationsRead, useNotifications } from '../hooks/useNotifications';
-import type { AppTabsParamList } from '../../../navigation/types';
+import type { AppTabScreenProps } from '../../../navigation/types';
 import type { NotificationRecord } from '../../../lib/api/types';
 
-type Props = BottomTabScreenProps<AppTabsParamList, 'Notifications'>;
-
-function timeAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(diffMs / 60_000);
-  if (minutes < 1) return "à l'instant";
-  if (minutes < 60) return `il y a ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `il y a ${hours} h`;
-  return `il y a ${Math.floor(hours / 24)} j`;
+function visual(item: NotificationRecord): { icon: IconName; tone: Tone } {
+  if (item.type === 'TASK_ASSIGNED') return { icon: 'assignment', tone: 'primary' };
+  if (item.type === 'SLA_BREACHED') return { icon: 'error-outline', tone: 'danger' };
+  if (item.type === 'SLA_WARNING') return { icon: 'alarm', tone: 'warning' };
+  if (item.type === 'MANUAL') return { icon: 'chat-bubble-outline', tone: 'secondary' };
+  if (/termin|clôtur/i.test(item.title)) return { icon: 'check-circle-outline', tone: 'success' };
+  return { icon: 'update', tone: 'primary' };
 }
 
 function NotificationRow({ item, onPress }: { item: NotificationRecord; onPress: () => void }) {
+  const styles = useStyles();
+  const unread = item.status !== 'READ';
+  const { icon, tone } = visual(item);
   return (
-    <TouchableOpacity style={[styles.row, item.status !== 'READ' && styles.rowUnread]} onPress={onPress}>
-      <Text style={styles.title}>{item.title}</Text>
-      <Text style={styles.body} numberOfLines={2}>
-        {item.body}
-      </Text>
-      <Text style={styles.time}>{timeAgo(item.createdAt)}</Text>
-    </TouchableOpacity>
+    <Card onPress={onPress} style={[styles.row, unread && styles.rowUnread]}>
+      <IconBubble name={icon} tone={tone} size={40} />
+      <View style={styles.texts}>
+        <Text style={[styles.title, unread && styles.titleUnread]} numberOfLines={1}>
+          {item.title}
+        </Text>
+        <Text style={styles.body} numberOfLines={2}>
+          {item.body}
+        </Text>
+      </View>
+      <View style={styles.side}>
+        <Text style={styles.time}>{formatShortWhen(item.createdAt)}</Text>
+        {unread ? <View style={styles.dot} /> : null}
+      </View>
+    </Card>
   );
 }
 
-export function NotificationsScreen({ navigation }: Props) {
+export function NotificationsScreen({ navigation }: AppTabScreenProps<'Notifications'>) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const { data, isLoading, isRefetching, refetch } = useNotifications();
   const markRead = useMarkNotificationsRead();
 
-  const notifications = data?.data ?? [];
+  const all = data?.data ?? [];
+  const notifications = unreadOnly ? all.filter((n) => n.status !== 'READ') : all;
+  const unread = data?.unread ?? 0;
 
   const openNotification = (item: NotificationRecord) => {
     if (item.status !== 'READ') markRead.mutate([item.id]);
     const taskId = item.data?.taskId;
     if (typeof taskId === 'string') {
-      navigation.navigate('Tasks', { screen: 'TaskDetail', params: { taskId } });
+      navigation.navigate('Tasks', { screen: 'TaskDetail', params: { taskId }, initial: false });
     }
   };
 
   return (
     <View style={styles.container}>
-      {(data?.unread ?? 0) > 0 && (
-        <TouchableOpacity style={styles.markAllButton} onPress={() => markRead.mutate('all')}>
-          <Text style={styles.markAllText}>Tout marquer comme lu ({data?.unread})</Text>
-        </TouchableOpacity>
-      )}
+      <ScreenHeader
+        title="Notifications"
+        large
+        right={unread > 0 ? <HeaderIconButton icon="done-all" onPress={() => markRead.mutate('all')} /> : null}
+      />
+      <View style={styles.segment}>
+        {[
+          { key: false, label: 'Toutes' },
+          { key: true, label: `Non lues${unread ? ` (${unread})` : ''}` },
+        ].map((tab) => (
+          <TouchableOpacity
+            key={String(tab.key)}
+            style={[styles.segmentItem, unreadOnly === tab.key && { backgroundColor: colors.primary }]}
+            onPress={() => setUnreadOnly(tab.key)}
+          >
+            <Text style={[styles.segmentText, { color: unreadOnly === tab.key ? colors.onPrimary : colors.textMuted }]}>{tab.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
       <FlatList
         data={notifications}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={notifications.length === 0 ? styles.emptyContainer : undefined}
-        refreshControl={<RefreshControl refreshing={isRefetching && !isLoading} onRefresh={() => refetch()} />}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={isRefetching && !isLoading} onRefresh={() => refetch()} tintColor={colors.primary} />}
         renderItem={({ item }) => <NotificationRow item={item} onPress={() => openNotification(item)} />}
-        ListEmptyComponent={<Text style={styles.emptyText}>Aucune notification</Text>}
+        ListEmptyComponent={
+          isLoading ? null : (
+            <EmptyState icon="notifications-none" title={unreadOnly ? 'Aucune notification non lue' : 'Aucune notification'} />
+          )
+        }
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  markAllButton: { padding: 12, alignItems: 'center', backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
-  markAllText: { color: colors.primary, fontWeight: '600', fontSize: 13 },
-  row: {
-    backgroundColor: colors.surface,
-    marginHorizontal: 12,
-    marginTop: 10,
-    borderRadius: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  rowUnread: { borderColor: colors.primary },
-  title: { fontSize: 15, fontWeight: '700', color: colors.text },
-  body: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
-  time: { fontSize: 11, color: colors.textMuted, marginTop: 6 },
-  emptyContainer: { flexGrow: 1, justifyContent: 'center' },
-  emptyText: { textAlign: 'center', color: colors.textMuted, fontSize: 15 },
-});
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    segment: {
+      flexDirection: 'row',
+      marginHorizontal: 16,
+      marginBottom: 12,
+      padding: 4,
+      borderRadius: radius.md,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: radius.sm },
+    segmentText: { fontSize: 13, fontWeight: '700' },
+    list: { paddingHorizontal: 16, paddingBottom: 24, gap: 10 },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+    rowUnread: { borderColor: c.primary },
+    texts: { flex: 1, gap: 2 },
+    title: { fontSize: 14, fontWeight: '600', color: c.text },
+    titleUnread: { fontWeight: '800' },
+    body: { fontSize: 12, color: c.textMuted },
+    side: { alignItems: 'flex-end', gap: 8, alignSelf: 'stretch' },
+    time: { fontSize: 11, color: c.textMuted },
+    dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.primary },
+  }),
+);

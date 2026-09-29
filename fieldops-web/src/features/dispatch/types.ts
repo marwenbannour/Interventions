@@ -170,6 +170,8 @@ interface TaskCommon {
   reworkOfTaskId: string | null;
   reportGeneratedAt: string | null;
   reportSha256: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TaskDetail extends TaskCommon {

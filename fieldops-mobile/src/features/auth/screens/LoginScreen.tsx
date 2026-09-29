@@ -2,17 +2,21 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
-  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
-import { colors } from '../../../theme/colors';
+import { Icon } from '../../../components/ui/Icon';
+import { Button, Field } from '../../../components/ui/primitives';
+import { radius } from '../../../theme/palette';
+import { makeStyles, useTheme } from '../../../theme/ThemeProvider';
 import { secureStorage } from '../../../lib/secureStorage';
 import { ApiError } from '../../../lib/api/errors';
 import { authApi } from '../api/auth.api';
@@ -27,7 +31,11 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export function LoginScreen({ navigation }: AuthStackScreenProps<'Login'>) {
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const setSession = useSessionStore((s) => s.setSession);
   const {
     control,
@@ -51,93 +59,117 @@ export function LoginScreen({ navigation }: AuthStackScreenProps<'Login'>) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.content}>
-        <Text style={styles.title}>FieldOps</Text>
-        <Text style={styles.subtitle}>Connexion agent</Text>
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView style={styles.flex} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <View style={[styles.hero, { paddingTop: insets.top + 40 }]}>
+          <View style={styles.logo}>
+            <Icon name="engineering" size={56} color="#FFFFFF" />
+          </View>
+          <Text style={styles.heroTitle}>Interventions</Text>
+          <Text style={styles.heroSubtitle}>Agent</Text>
+          <Text style={styles.heroTagline}>Toujours sur le terrain,{'\n'}plus proche de vos équipes</Text>
+        </View>
 
-        <Controller
-          control={control}
-          name="email"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              style={styles.input}
-              placeholder="Adresse e-mail"
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-              onBlur={onBlur}
-              onChangeText={onChange}
-              value={value}
-              editable={!isSubmitting}
-            />
-          )}
-        />
-        {errors.email && <Text style={styles.fieldError}>{errors.email.message}</Text>}
+        <View style={styles.sheet}>
+          <Controller
+            control={control}
+            name="email"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <Field
+                icon="mail-outline"
+                placeholder="Email"
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                onBlur={onBlur}
+                onChangeText={onChange}
+                value={value}
+                editable={!isSubmitting}
+                error={errors.email?.message}
+              />
+            )}
+          />
 
-        <Controller
-          control={control}
-          name="password"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              style={styles.input}
-              placeholder="Mot de passe"
-              secureTextEntry
-              autoComplete="password"
-              onBlur={onBlur}
-              onChangeText={onChange}
-              value={value}
-              editable={!isSubmitting}
-            />
-          )}
-        />
-        {errors.password && <Text style={styles.fieldError}>{errors.password.message}</Text>}
+          <Controller
+            control={control}
+            name="password"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <Field
+                icon="lock-outline"
+                placeholder="Mot de passe"
+                secureTextEntry={!showPassword}
+                autoComplete="password"
+                onBlur={onBlur}
+                onChangeText={onChange}
+                value={value}
+                editable={!isSubmitting}
+                error={errors.password?.message}
+                right={
+                  <TouchableOpacity onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
+                    <Icon name={showPassword ? 'visibility-off' : 'visibility'} size={20} color={colors.textMuted} />
+                  </TouchableOpacity>
+                }
+              />
+            )}
+          />
 
-        {serverError && <Text style={styles.serverError}>{serverError}</Text>}
+          {serverError ? <Text style={styles.serverError}>{serverError}</Text> : null}
 
-        <TouchableOpacity
-          style={[styles.button, isSubmitting && styles.buttonDisabled]}
-          onPress={handleSubmit(onSubmit)}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color={colors.primaryText} />
-          ) : (
-            <Text style={styles.buttonText}>Se connecter</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+          <Button label="Se connecter" onPress={handleSubmit(onSubmit)} loading={isSubmitting} style={styles.submit} />
+
+          <TouchableOpacity
+            onPress={() =>
+              Alert.alert(
+                'Mot de passe oublié',
+                "Contactez votre superviseur ou l'administrateur FieldOps pour réinitialiser votre mot de passe.",
+              )
+            }
+            style={styles.forgot}
+          >
+            <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
+          </TouchableOpacity>
+
+          <View style={styles.footer}>
+            <Icon name="support-agent" size={64} color={colors.border} />
+            <Text style={styles.footerText}>Une application pour une gestion{'\n'}efficace des interventions</Text>
+          </View>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24, gap: 12 },
-  title: { fontSize: 32, fontWeight: '700', color: colors.text, textAlign: 'center' },
-  subtitle: { fontSize: 16, color: colors.textMuted, textAlign: 'center', marginBottom: 24 },
-  input: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: colors.text,
-  },
-  fieldError: { color: colors.danger, fontSize: 13, marginTop: -6 },
-  serverError: { color: colors.danger, fontSize: 14, textAlign: 'center', marginTop: 4 },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: colors.primaryText, fontSize: 16, fontWeight: '600' },
-});
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    flex: { flex: 1, backgroundColor: c.primary },
+    scroll: { flexGrow: 1 },
+    hero: { alignItems: 'center', paddingBottom: 40, paddingHorizontal: 24 },
+    logo: {
+      width: 96,
+      height: 96,
+      borderRadius: 48,
+      backgroundColor: 'rgba(255,255,255,0.15)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 16,
+    },
+    heroTitle: { color: '#FFFFFF', fontSize: 30, fontWeight: '700' },
+    heroSubtitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '600' },
+    heroTagline: { color: 'rgba(255,255,255,0.85)', fontSize: 14, textAlign: 'center', marginTop: 10, lineHeight: 20 },
+    sheet: {
+      flexGrow: 1,
+      backgroundColor: c.background,
+      borderTopLeftRadius: radius.xl + 8,
+      borderTopRightRadius: radius.xl + 8,
+      padding: 24,
+      paddingTop: 32,
+      gap: 14,
+    },
+    serverError: { color: c.danger, fontSize: 14, textAlign: 'center' },
+    submit: { marginTop: 6 },
+    forgot: { alignItems: 'center', paddingVertical: 6 },
+    forgotText: { color: c.primary, fontSize: 14, fontWeight: '600' },
+    footer: { alignItems: 'center', marginTop: 'auto', paddingTop: 24, gap: 8 },
+    footerText: { color: c.textMuted, fontSize: 12, textAlign: 'center' },
+  }),
+);

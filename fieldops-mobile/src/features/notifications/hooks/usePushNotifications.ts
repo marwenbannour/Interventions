@@ -6,7 +6,8 @@ import { registerPushToken } from '../services/pushRegistration';
 function navigateFromNotification(response: Notifications.NotificationResponse | null): void {
   const taskId = response?.notification.request.content.data?.taskId as string | undefined;
   if (!taskId || !navigationRef.isReady()) return;
-  navigationRef.navigate('Tasks', { screen: 'TaskDetail', params: { taskId } });
+  // initial: false — la liste reste sous le détail, le retour y ramène.
+  navigationRef.navigate('Tasks', { screen: 'TaskDetail', params: { taskId }, initial: false });
 }
 
 /**

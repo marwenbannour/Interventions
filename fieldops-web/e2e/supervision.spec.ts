@@ -81,7 +81,7 @@ test.describe('Notifications', () => {
     await loginAs(page, 'direction');
 
     // Cloche : badge non lu et aperçu.
-    const bell = page.locator('header').getByRole('button').first();
+    const bell = page.locator('header').getByRole('button', { name: 'Notifications' });
     await expect(bell.locator('span.bg-destructive')).toBeVisible();
     await bell.click();
     await expect(page.getByRole('menuitem').filter({ hasText: title })).toBeVisible();

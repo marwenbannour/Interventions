@@ -1,7 +1,9 @@
 import * as Location from 'expo-location';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { colors } from '../../../theme/colors';
+import { Alert, Modal, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Button } from '../../../components/ui/primitives';
+import { radius } from '../../../theme/palette';
+import { makeStyles, useTheme } from '../../../theme/ThemeProvider';
 import { submitTransition } from '../actions/taskActions';
 import { checkAssetScan } from '../../sync/engine/workflowEngine';
 import { AssetScanModal } from './AssetScanModal';
@@ -15,21 +17,26 @@ async function getCurrentPosition(): Promise<{ lat: number; lng: number } | null
   return { lat: position.coords.latitude, lng: position.coords.longitude };
 }
 
+/** Transitions « de retrait » (refus, annulation, non-conformité) affichées en rouge. */
+const isBackward = (t: AvailableTransition) => /refus|annul|non conforme|reprendre/i.test(t.label);
+
 interface Props {
   task: TaskModel;
   transitions: AvailableTransition[];
 }
 
 export function TransitionButtons({ task, transitions }: Props) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [commentModal, setCommentModal] = useState<AvailableTransition | null>(null);
   const [comment, setComment] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busyTo, setBusyTo] = useState<string | null>(null);
   // V3 — scan QR : transition en attente du scan, puis code scanné conservé si un commentaire suit.
   const [scanFor, setScanFor] = useState<AvailableTransition | null>(null);
   const [scannedCode, setScannedCode] = useState<string | undefined>();
 
   const run = async (transition: AvailableTransition, commentText?: string, assetCode?: string) => {
-    setBusy(true);
+    setBusyTo(transition.to);
     try {
       let lat: number | undefined;
       let lng: number | undefined;
@@ -52,13 +59,13 @@ export function TransitionButtons({ task, transitions }: Props) {
     } catch (error) {
       Alert.alert('Erreur', error instanceof Error ? error.message : 'Action impossible pour le moment.');
     } finally {
-      setBusy(false);
+      setBusyTo(null);
     }
   };
 
   const onPress = (transition: AvailableTransition) => {
     if (transition.missing.length > 0) {
-      Alert.alert(transition.label, transition.missing.join('\n'));
+      Alert.alert(transition.label, `Avant de continuer :\n• ${transition.missing.join('\n• ')}`);
       return;
     }
     if (transition.requiresAssetScan) {
@@ -97,48 +104,47 @@ export function TransitionButtons({ task, transitions }: Props) {
 
   if (transitions.length === 0) return null;
 
+  // Action principale : première transition « vers l'avant » réalisable.
+  const primary = transitions.find((t) => !isBackward(t) && t.missing.length === 0) ?? transitions.find((t) => !isBackward(t));
+
   return (
     <View style={styles.container}>
       {transitions.map((t) => (
-        <TouchableOpacity
+        <Button
           key={t.to}
-          style={[styles.button, t.missing.length > 0 && styles.buttonDisabled]}
+          label={t.label}
+          icon={t.missing.length > 0 ? 'lock-outline' : t.requiresAssetScan ? 'qr-code-scanner' : undefined}
+          variant={isBackward(t) ? 'danger' : t === primary && t.missing.length === 0 ? 'primary' : 'outline'}
+          loading={busyTo === t.to}
+          disabled={busyTo !== null && busyTo !== t.to}
           onPress={() => onPress(t)}
-          disabled={busy}
-        >
-          {busy ? (
-            <ActivityIndicator color={t.missing.length > 0 ? colors.textMuted : colors.primaryText} />
-          ) : (
-            <Text style={[styles.buttonText, t.missing.length > 0 && styles.buttonTextDisabled]}>{t.label}</Text>
-          )}
-        </TouchableOpacity>
+        />
       ))}
 
       <AssetScanModal visible={!!scanFor} asset={task.asset} onScanned={onScanned} onCancel={() => setScanFor(null)} />
 
       <Modal visible={!!commentModal} transparent animationType="fade" onRequestClose={() => setCommentModal(null)}>
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{commentModal?.label}</Text>
             <TextInput
               style={styles.modalInput}
               placeholder="Commentaire (obligatoire)"
+              placeholderTextColor={colors.textMuted}
               value={comment}
               onChangeText={setComment}
               multiline
               autoFocus
             />
             <View style={styles.modalActions}>
-              <TouchableOpacity onPress={() => setCommentModal(null)} style={styles.modalCancel} disabled={busy}>
-                <Text style={styles.modalCancelText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              <Button label="Annuler" variant="ghost" onPress={() => setCommentModal(null)} disabled={busyTo !== null} style={styles.flex} />
+              <Button
+                label="Confirmer"
                 onPress={() => commentModal && run(commentModal, comment.trim(), scannedCode)}
-                style={[styles.modalConfirm, comment.trim().length < 3 && styles.buttonDisabled]}
-                disabled={comment.trim().length < 3 || busy}
-              >
-                {busy ? <ActivityIndicator color={colors.primaryText} /> : <Text style={styles.modalConfirmText}>Confirmer</Text>}
-              </TouchableOpacity>
+                disabled={comment.trim().length < 3}
+                loading={busyTo !== null}
+                style={styles.flex}
+              />
             </View>
           </View>
         </View>
@@ -147,28 +153,24 @@ export function TransitionButtons({ task, transitions }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { gap: 8 },
-  button: { backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
-  buttonDisabled: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  buttonText: { color: colors.primaryText, fontSize: 15, fontWeight: '600' },
-  buttonTextDisabled: { color: colors.textMuted },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 24 },
-  modalCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 20, gap: 12 },
-  modalTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 10,
-    minHeight: 80,
-    textAlignVertical: 'top',
-    fontSize: 14,
-    color: colors.text,
-  },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
-  modalCancel: { paddingVertical: 10, paddingHorizontal: 14 },
-  modalCancelText: { color: colors.textMuted, fontSize: 15 },
-  modalConfirm: { backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 18 },
-  modalConfirmText: { color: colors.primaryText, fontSize: 15, fontWeight: '600' },
-});
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    container: { gap: 10 },
+    flex: { flex: 1 },
+    modalOverlay: { flex: 1, justifyContent: 'center', padding: 24 },
+    modalCard: { backgroundColor: c.surface, borderRadius: radius.lg, padding: 20, gap: 12 },
+    modalTitle: { fontSize: 17, fontWeight: '700', color: c.text },
+    modalInput: {
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: radius.md,
+      padding: 12,
+      minHeight: 90,
+      textAlignVertical: 'top',
+      fontSize: 14,
+      color: c.text,
+      backgroundColor: c.background,
+    },
+    modalActions: { flexDirection: 'row', gap: 10 },
+  }),
+);

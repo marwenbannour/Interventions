@@ -3,9 +3,10 @@ import type { AccountKey } from './support/api';
 import { loginAs, navigate, sidebar } from './support/ui';
 
 /** Libellé du menu → URL et titre de la page. */
-const PAGES: Record<string, { path: RegExp; heading: string }> = {
-  Dispatch: { path: /\/dispatch$/, heading: 'Dispatch' },
-  Agents: { path: /\/agents$/, heading: 'Agents' },
+const PAGES: Record<string, { path: RegExp; heading: string | RegExp }> = {
+  Accueil: { path: /\/accueil$/, heading: /^Bonjour, / },
+  Interventions: { path: /\/dispatch$/, heading: 'Interventions' },
+  Carte: { path: /\/agents$/, heading: 'Carte des agents' },
   Clients: { path: /\/clients$/, heading: 'Clients' },
   Équipements: { path: /\/assets$/, heading: 'Équipements' },
   Maintenance: { path: /\/maintenance$/, heading: 'Maintenance préventive' },
@@ -13,15 +14,20 @@ const PAGES: Record<string, { path: RegExp; heading: string }> = {
   Qualité: { path: /\/quality$/, heading: 'Qualité' },
   Notifications: { path: /\/notifications$/, heading: 'Notifications' },
   SLA: { path: /\/sla$/, heading: 'SLA' },
-  Admin: { path: /\/admin\/organization$/, heading: 'Organisation' },
+  Profil: { path: /\/profil$/, heading: 'Profil' },
+  Paramètres: { path: /\/admin\/organization$/, heading: 'Organisation' },
 };
 
+const COMMON = ['Accueil', 'Interventions', 'Carte', 'Clients'];
 const MENU: Record<Exclude<AccountKey, 'client'>, string[]> = {
-  admin: ['Dispatch', 'Agents', 'Clients', 'Équipements', 'Maintenance', 'Reporting', 'Qualité', 'Notifications', 'SLA', 'Admin'],
-  supervisor: ['Dispatch', 'Agents', 'Clients', 'Équipements', 'Maintenance', 'Reporting', 'Qualité', 'Notifications', 'SLA'],
-  direction: ['Dispatch', 'Agents', 'Clients', 'Équipements', 'Maintenance', 'Reporting', 'Qualité', 'Notifications', 'SLA'],
-  agent: ['Dispatch', 'Agents', 'Clients', 'Reporting', 'Qualité', 'Notifications'],
+  admin: [...COMMON, 'Équipements', 'Maintenance', 'Reporting', 'Qualité', 'Notifications', 'SLA', 'Profil', 'Paramètres'],
+  supervisor: [...COMMON, 'Équipements', 'Maintenance', 'Reporting', 'Qualité', 'Notifications', 'SLA', 'Profil'],
+  direction: [...COMMON, 'Équipements', 'Maintenance', 'Reporting', 'Qualité', 'Notifications', 'SLA', 'Profil'],
+  agent: [...COMMON, 'Reporting', 'Qualité', 'Notifications', 'Profil'],
 };
+
+// Le lien Notifications porte le compteur de non-lues (« Notifications 9+ ») : on compare le début du libellé.
+const startsWith = (label: string) => new RegExp(`^${label}`);
 
 test.describe('Navigation et droits par rôle', () => {
   for (const [role, items] of Object.entries(MENU) as [keyof typeof MENU, string[]][]) {
@@ -30,11 +36,12 @@ test.describe('Navigation et droits par rôle', () => {
       page.on('pageerror', (e) => errors.push(e.message));
 
       await loginAs(page, role);
-      await expect(sidebar(page).getByRole('link')).toHaveText(items);
+      await expect(sidebar(page).getByRole('link')).toHaveText(items.map(startsWith));
 
       for (const label of items) {
         await navigate(page, label, PAGES[label].path);
-        await expect(page.getByRole('heading', { level: 1, name: PAGES[label].heading, exact: true })).toBeVisible();
+        const { heading } = PAGES[label];
+        await expect(page.getByRole('heading', { level: 1, name: heading, exact: typeof heading === 'string' })).toBeVisible();
       }
       expect(errors, 'erreurs JavaScript non gérées').toEqual([]);
     });

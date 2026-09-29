@@ -6,7 +6,11 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3
 
 let refreshInFlight: Promise<string | null> | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
+/**
+ * Rafraîchissement unique partagé : le refresh token tourne à chaque appel et l'API révoque toute
+ * la session si un ancien jeton est rejoué. Deux refresh concurrents doivent donc n'en faire qu'un.
+ */
+export async function refreshAccessToken(): Promise<string | null> {
   if (!refreshInFlight) {
     refreshInFlight = authApi
       .refresh()

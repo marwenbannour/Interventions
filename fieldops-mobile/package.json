@@ -4,6 +4,7 @@
   "main": "index.ts",
   "dependencies": {
     "@babel/plugin-proposal-decorators": "^7.29.7",
+    "@expo/vector-icons": "^15.0.2",
     "@hookform/resolvers": "^5.9.1",
     "@morrowdigital/watermelondb-expo-plugin": "^2.3.3",
     "@nozbe/watermelondb": "^0.28.0",

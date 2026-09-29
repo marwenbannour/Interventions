@@ -1,71 +1,35 @@
 import { withObservables } from '@nozbe/watermelondb/react';
-import { Q } from '@nozbe/watermelondb';
 import { useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { HeaderIconButton, ScreenHeader } from '../../../components/ui/ScreenHeader';
+import { Chip, EmptyState, SearchBar } from '../../../components/ui/primitives';
 import { database } from '../../../lib/db/database';
-import { colors } from '../../../theme/colors';
+import { makeStyles, useTheme } from '../../../theme/ThemeProvider';
 import { runSync } from '../../sync/engine/syncEngine';
-import { useSyncStatusStore } from '../../sync/store/syncStatus.store';
-import { priorityLabel, statusLabel } from '../utils/statusLabels';
+import { SyncBanner } from '../components/SyncBanner';
+import { TaskCard } from '../components/TaskCard';
+import { applyTaskFilters, countAdvanced, useTaskFiltersStore, type QuickFilter } from '../store/taskFilters.store';
 import type { Task as TaskModel } from '../db/models/Task';
 import type { TaskStackScreenProps } from '../../../navigation/types';
 
-const TERMINAL_STATUSES = ['COMPLETED', 'EVALUATED', 'CANCELLED'];
-
-function SyncBanner() {
-  const phase = useSyncStatusStore((s) => s.phase);
-  const lastError = useSyncStatusStore((s) => s.lastError);
-
-  if (phase === 'idle') return null;
-  const label =
-    phase === 'syncing'
-      ? 'Synchronisation…'
-      : phase === 'offline'
-        ? 'Hors ligne — les données affichées peuvent être obsolètes'
-        : `Erreur de synchronisation : ${lastError ?? ''}`;
-  const color = phase === 'error' ? colors.danger : phase === 'offline' ? colors.warning : colors.textMuted;
-
-  return (
-    <View style={styles.banner}>
-      <Text style={[styles.bannerText, { color }]}>{label}</Text>
-    </View>
-  );
-}
-
-function TaskRowBase({ task, onPress }: { task: TaskModel; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.row} onPress={onPress}>
-      <View style={styles.rowHeader}>
-        <Text style={styles.reference}>{task.reference}</Text>
-        <Text style={styles.priority}>{priorityLabel(task.priority)}</Text>
-      </View>
-      <Text style={styles.title} numberOfLines={1}>
-        {task.title}
-      </Text>
-      <Text style={styles.siteName} numberOfLines={1}>
-        {task.site?.name ?? ''}
-      </Text>
-      <View style={styles.statusRow}>
-        <Text style={styles.status}>{statusLabel(task.status)}</Text>
-        {task.localStatus === 'pending' && <Text style={styles.pendingBadge}>en attente de sync</Text>}
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// La requête de la liste ne suit que l'appartenance à l'ensemble (voir TaskDetailScreen) —
-// chaque ligne s'abonne donc à son propre modèle pour refléter ses changements de champs
-// (statut, localStatus...) sans dépendre d'un ajout/retrait dans la liste.
-const enhanceRow = withObservables(['task'], ({ task }: { task: TaskModel }) => ({ task }));
-const TaskRow = enhanceRow(TaskRowBase);
+const QUICK: { key: QuickFilter; label: string }[] = [
+  { key: 'all', label: 'Toutes' },
+  { key: 'urgent', label: 'Urgentes' },
+  { key: 'active', label: 'En cours' },
+  { key: 'done', label: 'Terminées' },
+];
 
 interface Props extends TaskStackScreenProps<'TaskList'> {
   tasks: TaskModel[];
 }
 
 function TaskListScreenBase({ tasks, navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [refreshing, setRefreshing] = useState(false);
-  const active = tasks.filter((t) => !TERMINAL_STATUSES.includes(t.status));
+  const { quick, search, advanced, setQuick, setSearch } = useTaskFiltersStore();
+  const visible = applyTaskFilters(tasks, quick, search, advanced);
+  const activeFilters = countAdvanced(advanced);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -75,48 +39,51 @@ function TaskListScreenBase({ tasks, navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <ScreenHeader
+        title="Interventions"
+        large
+        right={<HeaderIconButton icon="tune" badge={activeFilters || undefined} onPress={() => navigation.navigate('TaskFilters')} />}
+      />
+      <View style={styles.controls}>
+        <SearchBar value={search} onChangeText={setSearch} placeholder="Rechercher une intervention…" />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {QUICK.map((q) => (
+            <Chip key={q.key} label={q.label} selected={quick === q.key} onPress={() => setQuick(q.key)} />
+          ))}
+        </ScrollView>
+      </View>
       <SyncBanner />
       <FlatList
-        data={active}
+        data={visible}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={active.length === 0 ? styles.emptyContainer : undefined}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         renderItem={({ item }) => (
-          <TaskRow task={item} onPress={() => navigation.navigate('TaskDetail', { taskId: item.serverId })} />
+          <TaskCard task={item} onPress={() => navigation.navigate('TaskDetail', { taskId: item.serverId })} />
         )}
-        ListEmptyComponent={<Text style={styles.emptyText}>Aucune intervention en cours</Text>}
+        ListEmptyComponent={
+          <EmptyState
+            icon="inbox"
+            title="Aucune intervention"
+            hint={search || activeFilters || quick !== 'all' ? 'Modifiez la recherche ou les filtres.' : 'Tirez vers le bas pour synchroniser.'}
+          />
+        }
       />
     </View>
   );
 }
 
 const enhance = withObservables([], () => ({
-  tasks: database.collections.get<TaskModel>('tasks').query(Q.sortBy('scheduled_start', Q.asc)),
+  tasks: database.collections.get<TaskModel>('tasks').query().observe(),
 }));
 
 export const TaskListScreen = enhance(TaskListScreenBase);
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  banner: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
-  bannerText: { fontSize: 13 },
-  row: {
-    backgroundColor: colors.surface,
-    marginHorizontal: 12,
-    marginTop: 10,
-    borderRadius: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  rowHeader: { flexDirection: 'row', justifyContent: 'space-between' },
-  reference: { fontSize: 13, color: colors.textMuted, fontWeight: '600' },
-  priority: { fontSize: 12, color: colors.textMuted },
-  title: { fontSize: 16, fontWeight: '600', color: colors.text, marginTop: 4 },
-  siteName: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
-  status: { fontSize: 13, color: colors.primary, fontWeight: '600' },
-  pendingBadge: { fontSize: 11, color: colors.warning, fontWeight: '600' },
-  emptyContainer: { flexGrow: 1, justifyContent: 'center' },
-  emptyText: { textAlign: 'center', color: colors.textMuted, fontSize: 15 },
-});
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    controls: { paddingHorizontal: 16, gap: 12, paddingBottom: 12 },
+    chips: { gap: 8 },
+    list: { paddingHorizontal: 16, paddingBottom: 24, gap: 10 },
+  }),
+);

@@ -27,10 +27,13 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } }],
+  // Build de production : pages précompilées (≈ 5 ms) au lieu de la compilation à la volée du mode dev
+  // (jusqu'à une minute par page au premier accès), source de lenteurs et de tests instables.
+  // Un serveur déjà lancé sur le port (dev ou prod) est réutilisé tel quel.
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run build && npx next start -p 3001',
     url: `${BASE_URL}/login`,
     reuseExistingServer: true,
-    timeout: 120_000,
+    timeout: 300_000,
   },
 });
