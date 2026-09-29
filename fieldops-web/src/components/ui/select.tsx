@@ -5,7 +5,29 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "cn"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+/**
+ * Libellés des options déduits des <SelectItem> enfants : sans `items`, Base UI affiche la valeur
+ * brute dans <SelectValue> (identifiants techniques, « __all__ »…). Un `items` explicite reste prioritaire.
+ */
+function collectItems(node: React.ReactNode, out: Record<string, React.ReactNode>) {
+  React.Children.forEach(node, (child) => {
+    if (!React.isValidElement(child)) return
+    const props = child.props as { value?: unknown; children?: React.ReactNode }
+    if (child.type === SelectItem && (typeof props.value === "string" || typeof props.value === "number")) {
+      out[String(props.value)] = props.children
+    } else if (props.children) {
+      collectItems(props.children, out)
+    }
+  })
+}
+
+function Select<Value, Multiple extends boolean | undefined = false>(
+  props: SelectPrimitive.Root.Props<Value, Multiple>
+) {
+  const derived: Record<string, React.ReactNode> = {}
+  if (!props.items) collectItems(props.children, derived)
+  return <SelectPrimitive.Root {...props} items={props.items ?? derived} />
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (

@@ -35,3 +35,11 @@ export enum EventSource {
   OFFLINE_SYNC = 'OFFLINE_SYNC',
   SYSTEM = 'SYSTEM',
 }
+
+/** Origine d'une intervention (V3) — traçabilité et reporting. */
+export enum TaskOrigin {
+  MANUAL = 'MANUAL',
+  CLIENT_REQUEST = 'CLIENT_REQUEST',
+  PREVENTIVE = 'PREVENTIVE',
+  API = 'API',
+}

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/api/errors';
 import { useDeleteTeam, useDeleteZone, useTeamsAdmin, useZonesAdmin } from '../hooks/useOrganizationAdmin';
 import { ConfirmDeleteButton } from './ConfirmDeleteButton';
+import { OperationsSettingsCard } from './OperationsSettingsCard';
 import { OrgSettingsCard } from './OrgSettingsCard';
 import { TeamFormDialog } from './TeamFormDialog';
 import { ZoneFormDialog } from './ZoneFormDialog';
@@ -47,6 +48,7 @@ export function OrganizationAdminView() {
       </div>
 
       <OrgSettingsCard />
+      <OperationsSettingsCard />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-3">

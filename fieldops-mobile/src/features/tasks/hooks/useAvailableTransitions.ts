@@ -64,6 +64,7 @@ export function useAvailableTransitions(task: TaskModel | undefined): AvailableT
       agentId: task.agentId,
       checklist: task.checklist,
       signatureKey: task.signatureKey ?? (hasLocalSignature ? 'local-pending' : null),
+      assetCode: task.asset?.code ?? null,
     },
     agentUserId,
     mergedPhotoCounts,

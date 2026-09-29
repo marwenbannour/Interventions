@@ -1,6 +1,7 @@
 import { Model } from '@nozbe/watermelondb';
 import { date, field, json, readonly } from '@nozbe/watermelondb/decorators';
 import type {
+  AssetSnapshot,
   ChecklistItem,
   ClientSnapshot,
   MilestoneTimestamps,
@@ -12,6 +13,7 @@ import type {
 
 const sanitizeArray = (raw: unknown) => (Array.isArray(raw) ? raw : []);
 const sanitizeObject = (raw: unknown) => (raw && typeof raw === 'object' ? raw : {});
+const sanitizeNullableObject = (raw: unknown) => (raw && typeof raw === 'object' ? raw : null);
 
 export type LocalTaskStatus = 'synced' | 'pending';
 
@@ -41,6 +43,10 @@ export class Task extends Model {
   @field('signed_by_name') signedByName: string | null;
   @json('photo_counts_json', sanitizeObject) photoCounts: PhotoCounts;
   @field('version') version: number;
+  // ---- V3
+  @json('asset_json', sanitizeNullableObject) asset: AssetSnapshot | null;
+  @field('origin') origin: string | null;
+  @field('is_rework') isRework: boolean | null;
   @date('server_updated_at') serverUpdatedAt: Date;
   @field('local_status') localStatus: LocalTaskStatus;
   @readonly @date('created_at') createdAt: Date;

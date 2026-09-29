@@ -60,6 +60,8 @@ export const STANDARD_WORKFLOW: WorkflowDefinitionData = {
       conditions: [
         { type: 'IS_ASSIGNED_AGENT' },
         { type: 'PHOTO_REQUIRED', photoType: PhotoType.BEFORE, minCount: 1, message: 'Photo « avant » obligatoire' },
+        // V3 — preuve de présence devant l'équipement (sans effet si la tâche n'a pas d'équipement)
+        { type: 'ASSET_SCAN', message: "Scannez le QR code de l'équipement" },
       ],
     },
     {

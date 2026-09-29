@@ -4,6 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { In, MoreThan, Not, Repository } from 'typeorm';
 import { EventSource } from '../../common/enums/task.enums';
+import { syncOperations } from '../../common/observability/metrics';
 import { AuthUser } from '../../common/types/auth-user';
 import { Role } from '../../common/enums/role.enum';
 import { OrganizationsService } from '../organizations/organizations.service';
@@ -50,7 +51,11 @@ export class SyncService {
       (a, b) => Date.parse(a.clientTimestamp) - Date.parse(b.clientTimestamp),
     );
     const results: SyncOpResult[] = [];
-    for (const op of sorted) results.push(await this.applyOne(user, op));
+    for (const op of sorted) {
+      const r = await this.applyOne(user, op);
+      syncOperations.inc({ type: op.type, status: r.status });
+      results.push(r);
+    }
     return { serverTime: new Date().toISOString(), results };
   }
 
@@ -127,7 +132,7 @@ export class SyncService {
 
     const tasks = await this.tasks.find({
       where: since ? { ...where, updatedAt: MoreThan(since) } : { ...where, status: Not(In(TERMINAL_STATUSES)) },
-      relations: { site: true, client: true },
+      relations: { site: true, client: true, asset: true },
       order: { scheduledStart: 'ASC' },
       take: 500,
     });

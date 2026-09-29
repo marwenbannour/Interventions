@@ -13,6 +13,24 @@ function useInvalidateTask(taskId: string) {
   };
 }
 
+/** V3 — création d'intervention depuis la console. */
+export function useCreateTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: tasksApi.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['planning'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+}
+
+/** V3 — (re)génération du rapport PDF. */
+export function useGenerateReport(taskId: string) {
+  const invalidate = useInvalidateTask(taskId);
+  return useMutation({ mutationFn: () => tasksApi.generateReport(taskId), onSuccess: invalidate });
+}
+
 export function useAssignTask(taskId: string) {
   const invalidate = useInvalidateTask(taskId);
   return useMutation({

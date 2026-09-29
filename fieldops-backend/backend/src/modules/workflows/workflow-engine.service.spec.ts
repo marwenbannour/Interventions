@@ -114,6 +114,57 @@ describe('WorkflowEngineService', () => {
     expect(ok.to).toBe('CONTROL');
   });
 
+  describe('V3 — ASSET_SCAN', () => {
+    const onSite = () => task('ON_SITE');
+    const photos = { [PhotoType.BEFORE]: { total: 1, validated: 0 } };
+
+    it('bloque le démarrage sans scan quand la tâche a un équipement', () => {
+      const r = blocked(() =>
+        engine.assertTransition(def, ctx(onSite(), 'IN_PROGRESS', { photoCounts: photos, taskAssetCode: 'EQ-000001' })),
+      );
+      expect(r.missing).toContain("Scannez le QR code de l'équipement");
+    });
+
+    it('refuse un QR correspondant à un autre équipement', () => {
+      blocked(() =>
+        engine.assertTransition(
+          def,
+          ctx(onSite(), 'IN_PROGRESS', { photoCounts: photos, taskAssetCode: 'EQ-000001', assetCode: 'FIELDOPS:ASSET:EQ-000002' }),
+        ),
+      );
+    });
+
+    it('accepte le contenu QR complet ou le code saisi, sans tenir compte de la casse', () => {
+      for (const scanned of ['FIELDOPS:ASSET:EQ-000001', 'eq-000001', ' EQ-000001 ']) {
+        const ok = engine.assertTransition(
+          def,
+          ctx(onSite(), 'IN_PROGRESS', { photoCounts: photos, taskAssetCode: 'EQ-000001', assetCode: scanned }),
+        );
+        expect(ok.to).toBe('IN_PROGRESS');
+      }
+    });
+
+    it("n'exige rien si la tâche n'a pas d'équipement (rétrocompatible)", () => {
+      expect(engine.assertTransition(def, ctx(onSite(), 'IN_PROGRESS', { photoCounts: photos })).to).toBe('IN_PROGRESS');
+    });
+
+    it('available() annonce le scan et ne le compte pas comme prérequis manquant', () => {
+      const list = engine.available(def, {
+        task: onSite(), user: agent, site, photoCounts: photos, defaultGeofenceMeters: 300, taskAssetCode: 'EQ-000001',
+      });
+      const start = list.find((t) => t.to === 'IN_PROGRESS')!;
+      expect(start.requiresAssetScan).toBe(true);
+      expect(start.missing).toEqual([]);
+      const noAsset = engine.available(def, { task: onSite(), user: agent, site, photoCounts: photos, defaultGeofenceMeters: 300 });
+      expect(noAsset.find((t) => t.to === 'IN_PROGRESS')!.requiresAssetScan).toBe(false);
+    });
+
+    it('rejette une définition contenant une condition inconnue', () => {
+      const bad = { ...STANDARD_WORKFLOW, transitions: [{ ...STANDARD_WORKFLOW.transitions[0], conditions: [{ type: 'FOO' as any }] }] };
+      expect(() => engine.validateDefinition(bad)).toThrow(UnprocessableEntityException);
+    });
+  });
+
   it('les définitions par défaut sont structurellement valides', () => {
     expect(() => engine.validateDefinition(STANDARD_WORKFLOW)).not.toThrow();
     expect(() => engine.validateDefinition(LINEN_WORKFLOW)).not.toThrow();

@@ -31,7 +31,14 @@ export type WorkflowCondition =
   | { type: 'CHECKLIST_COMPLETE'; message?: string }
   | { type: 'COMMENT_REQUIRED'; message?: string }
   | { type: 'GEOFENCE'; radiusMeters?: number; message?: string }
-  | { type: 'SIGNATURE_REQUIRED'; message?: string };
+  | { type: 'SIGNATURE_REQUIRED'; message?: string }
+  /** V3 — l'agent doit scanner le QR de l'équipement de la tâche (ignorée si la tâche n'a pas d'équipement). */
+  | { type: 'ASSET_SCAN'; message?: string };
+
+export const CONDITION_TYPES: WorkflowCondition['type'][] = [
+  'PHOTO_REQUIRED', 'AGENT_ASSIGNED', 'IS_ASSIGNED_AGENT', 'CHECKLIST_COMPLETE', 'COMMENT_REQUIRED', 'GEOFENCE',
+  'SIGNATURE_REQUIRED', 'ASSET_SCAN',
+];
 
 export type NotifyTarget = 'SUPERVISORS' | 'ADMINS' | 'CLIENT' | 'AGENT' | 'DIRECTION';
 

@@ -15,6 +15,10 @@ export interface DashboardReport {
     avgInterventionMin: number | null;
     avgArrivalMin: number | null;
     byStatus: { status: string; count: number }[];
+    /** V3 — §9 réinterventions (sur le correctif) et répartition par origine. */
+    reworks: number;
+    reworkRate: number | null;
+    byOrigin: { origin: string; count: number }[];
   };
   today?: { scheduled: number; open: number; unassigned: number };
   agents?: { active: number; onDuty: number };
@@ -52,6 +56,9 @@ export interface AgentReportRow {
   avgRating: number | null;
   evaluations: number;
   slaBreached: number;
+  /** V3 — interventions d'origine de l'agent ayant nécessité une reprise. */
+  reworks: number;
+  reworkRate: number | null;
 }
 
 export interface AgentsReport {

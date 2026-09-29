@@ -77,6 +77,10 @@ export interface OrganizationSettings {
   locationIntervalSec?: number;
   defaultGeofenceMeters?: number;
   locationRetentionDays?: number;
+  // ---- V3 (absents des organisations créées en V2 : valeurs par défaut côté serveur)
+  reworkWindowDays?: number;
+  autoDispatch?: { enabled?: boolean; minScore?: number; onlyOnDuty?: boolean };
+  clientRequestTaskType?: string;
 }
 
 export interface Organization {

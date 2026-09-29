@@ -6,13 +6,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { Brackets, DataSource, EntityManager, Repository } from 'typeorm';
 import { paginate } from '../../common/dto/pagination.dto';
-import { Permission, roleHasPermission } from '../../common/enums/permission.enum';
+import { Permission, userHasPermission } from '../../common/enums/permission.enum';
 import { Role } from '../../common/enums/role.enum';
-import { EventSource, PhotoType } from '../../common/enums/task.enums';
+import { EventSource, PhotoType, TaskOrigin } from '../../common/enums/task.enums';
 import { Events, TaskAssignedPayload, TaskEventPayload, TaskTransitionedPayload, WorkflowNotifyPayload } from '../../common/events';
 import { AuthUser } from '../../common/types/auth-user';
 import { toPoint } from '../../common/utils/geo';
 import { AgentProfile, AgentStatus } from '../agents/entities/agent-profile.entity';
+import { ASSET_QR_PREFIX } from '../assets/assets.service';
+import { Asset, AssetStatus } from '../assets/entities/asset.entity';
 import { Site } from '../clients/entities/site.entity';
 import { OrganizationsService } from '../organizations/organizations.service';
 import { Photo } from '../photos/entities/photo.entity';
@@ -21,7 +23,9 @@ import { User } from '../users/entities/user.entity';
 import { WorkflowDefinition } from '../workflows/entities/workflow-definition.entity';
 import { WorkflowEngineService } from '../workflows/workflow-engine.service';
 import { Milestone, WorkflowAction } from '../workflows/workflow.types';
-import { ChecklistUpdateDto, CreateTaskDto, NoteDto, TaskQueryDto, TransitionDto, UpdateTaskDto } from './dto/task.dto';
+import {
+  ChecklistUpdateDto, CreateTaskDto, NoteDto, ServiceRequestDto, TaskQueryDto, TransitionDto, UpdateTaskDto,
+} from './dto/task.dto';
 import { Task } from './entities/task.entity';
 import { TaskEvent } from './entities/task-event.entity';
 
@@ -43,6 +47,13 @@ export interface TransitionOptions {
   source?: EventSource;
 }
 
+export interface CreateOptions {
+  origin?: TaskOrigin;
+  maintenancePlanId?: string | null;
+  /** false : l'appelant affecte lui-même (évite une course avec l'auto-dispatch). */
+  autoDispatch?: boolean;
+}
+
 @Injectable()
 export class TasksService {
   constructor(
@@ -59,10 +70,17 @@ export class TasksService {
   // Création / lecture
   // =====================================================================
 
-  async create(user: AuthUser, dto: CreateTaskDto): Promise<Task> {
+  async create(user: AuthUser, dto: CreateTaskDto, opts: CreateOptions = {}): Promise<Task> {
     const orgId = user.organizationId;
     const site = await this.ds.getRepository(Site).findOne({ where: { id: dto.siteId, organizationId: orgId } });
     if (!site) throw new NotFoundException('Site introuvable');
+    if (dto.assetId) {
+      const asset = await this.ds.getRepository(Asset).findOne({ where: { id: dto.assetId, organizationId: orgId } });
+      if (!asset || asset.siteId !== site.id) throw new BadRequestException("L'équipement n'appartient pas à ce site");
+      if (asset.status === AssetStatus.RETIRED) throw new UnprocessableEntityException('Équipement retiré du parc');
+    }
+    const origin = opts.origin ?? (user.apiKeyId ? TaskOrigin.API : TaskOrigin.MANUAL);
+    const settings = await this.orgs.getSettings(orgId);
     if (dto.parentTaskId && !(await this.tasks.exist({ where: { id: dto.parentTaskId, organizationId: orgId } }))) {
       throw new NotFoundException("Tâche d'origine introuvable");
     }
@@ -92,17 +110,96 @@ export class TasksService {
         scheduledStart: dto.scheduledStart ? new Date(dto.scheduledStart) : null,
         scheduledEnd: dto.scheduledEnd ? new Date(dto.scheduledEnd) : null,
         estimatedDurationMin: dto.estimatedDurationMin ?? null,
+        assetId: dto.assetId ?? null,
+        origin,
+        maintenancePlanId: opts.maintenancePlanId ?? null,
       });
       t.createdAt = new Date();
       await this.sla.applyDeadlines(t, m);
+      const reworkOf = await this.findReworkOrigin(m, t, settings.reworkWindowDays);
+      if (reworkOf) {
+        t.isRework = true;
+        t.reworkOfTaskId = reworkOf.id;
+      }
       const saved = await m.save(t);
-      await this.addEvent(m, saved, { type: 'CREATED', actorId: user.id, toStatus: saved.status });
+      await this.addEvent(m, saved, {
+        type: 'CREATED', actorId: user.id, toStatus: saved.status,
+        data: { origin, ...(reworkOf ? { reworkOf: reworkOf.reference } : {}) },
+      });
       return saved;
     });
 
-    this.events.emit(Events.TASK_CREATED, this.payload(task, user.id));
+    this.events.emit(Events.TASK_CREATED, {
+      ...this.payload(task, user.id),
+      origin: task.origin,
+      autoDispatchEligible: !dto.agentId && opts.autoDispatch !== false,
+    });
+    if (task.isRework) {
+      const reworkOf = await this.tasks.findOneBy({ id: task.reworkOfTaskId! });
+      this.events.emit(Events.TASK_REWORK_DETECTED, {
+        ...this.payload(task, user.id), reworkOfTaskId: task.reworkOfTaskId, reworkOfReference: reworkOf?.reference,
+        reworkOfAgentId: reworkOf?.agentId ?? null,
+      });
+      const np: WorkflowNotifyPayload = {
+        ...this.payload(task, user.id), targets: ['SUPERVISORS'],
+        title: 'Réintervention détectée — {reference}',
+        body: `{title} : même site${task.assetId ? ' et même équipement' : ''} que ${reworkOf?.reference ?? 'une intervention récente'}.`,
+        channels: ['IN_APP'],
+      };
+      this.events.emit(Events.WORKFLOW_NOTIFY, np);
+    }
     if (dto.agentId) return this.assign(user, task.id, dto.agentId);
     return task;
+  }
+
+  /** V3 — demande d'intervention émise par un client depuis son portail. */
+  async createServiceRequest(user: AuthUser, dto: ServiceRequestDto): Promise<Task> {
+    const site = await this.ds.getRepository(Site).findOne({ where: { id: dto.siteId, organizationId: user.organizationId } });
+    if (!site) throw new NotFoundException('Site introuvable');
+    if (user.role === Role.CLIENT && site.clientId !== user.clientId) {
+      throw new ForbiddenException('Ce site ne fait pas partie de votre contrat');
+    }
+    const settings = await this.orgs.getSettings(user.organizationId);
+    const task = await this.create(
+      user,
+      {
+        siteId: site.id,
+        title: dto.title,
+        description: dto.description,
+        type: settings.clientRequestTaskType,
+        priority: dto.priority,
+        assetId: dto.assetId,
+        scheduledStart: dto.preferredDate,
+      },
+      { origin: TaskOrigin.CLIENT_REQUEST },
+    );
+    const np: WorkflowNotifyPayload = {
+      ...this.payload(task, user.id), targets: ['SUPERVISORS'],
+      title: 'Nouvelle demande client — {reference}', body: '{title} ({status})', channels: ['IN_APP', 'PUSH'],
+    };
+    this.events.emit(Events.WORKFLOW_NOTIFY, np);
+    return task;
+  }
+
+  /**
+   * §9 Réintervention : une intervention corrective sur le même site — et le même équipement
+   * s'il est renseigné, sinon le même type — terminée dans la fenêtre paramétrée.
+   * Les tâches préventives, planifiées par nature, ne sont jamais des réinterventions.
+   */
+  private async findReworkOrigin(m: EntityManager, t: Task, windowDays: number): Promise<Task | null> {
+    if (!windowDays || t.origin === TaskOrigin.PREVENTIVE) return null;
+    const qb = m
+      .getRepository(Task)
+      .createQueryBuilder('p')
+      .where('p.organizationId = :org AND p.siteId = :site', { org: t.organizationId, site: t.siteId })
+      .andWhere('p.status IN (:...done)', { done: ['COMPLETED', 'EVALUATED'] })
+      .andWhere('p.completedAt >= :since', { since: new Date(Date.now() - windowDays * 86_400_000) })
+      .andWhere('p.origin != :prev', { prev: TaskOrigin.PREVENTIVE })
+      .orderBy('p.completedAt', 'DESC')
+      .limit(1);
+    if (t.assetId) qb.andWhere('p.assetId = :asset', { asset: t.assetId });
+    else qb.andWhere('p.type = :type', { type: t.type });
+    return qb.getOne();
   }
 
   async findAll(user: AuthUser, q: TaskQueryDto) {
@@ -111,6 +208,7 @@ export class TasksService {
       .leftJoinAndSelect('t.site', 'site')
       .leftJoinAndSelect('t.client', 'client')
       .leftJoinAndSelect('t.agent', 'agent')
+      .leftJoinAndSelect('t.asset', 'asset')
       .where('t.organizationId = :orgId', { orgId: user.organizationId })
       // Jointures many-to-one uniquement → offset/limit SQL direct (pas de sous-requête DISTINCT).
       .offset((q.page - 1) * q.limit)
@@ -127,6 +225,9 @@ export class TasksService {
     if (q.to) qb.andWhere('COALESCE(t.scheduledStart, t.createdAt) <= :to', { to: q.to });
     if (q.updatedSince) qb.andWhere('t.updatedAt > :us', { us: q.updatedSince });
     if (q.active) qb.andWhere('t.status NOT IN (:...terminal)', { terminal: TERMINAL_STATUSES });
+    if (q.assetId) qb.andWhere('t.assetId = :assetId', { assetId: q.assetId });
+    if (q.origin) qb.andWhere('t.origin = :origin', { origin: q.origin });
+    if (q.rework) qb.andWhere('t.isRework = true');
     if (q.slaBreached) {
       qb.andWhere('(t.ackBreached OR t.arrivalBreached OR t.interventionBreached OR t.closeBreached)');
     }
@@ -148,7 +249,7 @@ export class TasksService {
   async findOne(user: AuthUser, id: string) {
     const task = await this.tasks.findOne({
       where: { id, organizationId: user.organizationId },
-      relations: { site: true, client: true, agent: true, workflow: true },
+      relations: { site: true, client: true, agent: true, workflow: true, asset: true },
     });
     if (!task) throw new NotFoundException('Intervention introuvable');
     this.assertCanView(user, task);
@@ -156,8 +257,13 @@ export class TasksService {
     const settings = await this.orgs.getSettings(user.organizationId);
     const availableTransitions = this.engine.available(task.workflow, {
       task, user, site: task.site, photoCounts, defaultGeofenceMeters: settings.defaultGeofenceMeters,
+      taskAssetCode: task.asset?.code ?? null,
     });
-    return { ...task, photoCounts, availableTransitions };
+    const reworkOf = task.reworkOfTaskId
+      ? await this.tasks.findOne({ where: { id: task.reworkOfTaskId }, select: { id: true, reference: true, completedAt: true, agentId: true } })
+      : null;
+    const { reportKey, ...rest } = task;
+    return { ...rest, hasReport: !!reportKey, reworkOf, photoCounts, availableTransitions };
   }
 
   async getForUser(user: AuthUser, id: string): Promise<Task> {
@@ -206,7 +312,7 @@ export class TasksService {
   // Affectation (§6.6)
   // =====================================================================
 
-  async assign(user: AuthUser, id: string, agentId: string) {
+  async assign(user: AuthUser, id: string, agentId: string, meta: Record<string, unknown> = {}) {
     const orgId = user.organizationId;
     const profile = await this.ds.getRepository(AgentProfile).findOne({ where: { organizationId: orgId, userId: agentId } });
     if (!profile) throw new BadRequestException("L'utilisateur n'est pas un agent de l'organisation");
@@ -223,7 +329,7 @@ export class TasksService {
       previousAgentId = t.agentId;
       t.agentId = agentId;
       t.assignedAt = new Date();
-      await this.addEvent(m, t, { type: 'ASSIGNED', actorId: user.id, data: { agentId, previousAgentId } });
+      await this.addEvent(m, t, { type: 'ASSIGNED', actorId: user.id, data: { agentId, previousAgentId, ...meta } });
 
       // Passage automatique à "Assignée" si le workflow l'autorise depuis l'état courant.
       const def = await m.findOneByOrFail(WorkflowDefinition, { id: t.workflowId });
@@ -285,11 +391,14 @@ export class TasksService {
       const site = await m.findOneBy(Site, { id: t.siteId });
       const settings = await this.orgs.getSettings(orgId);
 
+      const taskAssetCode = t.assetId ? (await m.findOneBy(Asset, { id: t.assetId }))?.code ?? null : null;
       const transition = this.engine.assertTransition(def, {
         task: t, user, to: dto.to, comment: dto.comment, lat: dto.lat, lng: dto.lng, site,
         photoCounts: await this.photoCounts(t.id, m),
         defaultGeofenceMeters: settings.defaultGeofenceMeters,
+        taskAssetCode, assetCode: dto.assetCode,
       });
+      const assetScanned = !!(taskAssetCode && dto.assetCode && transition.conditions?.some((c) => c.type === 'ASSET_SCAN'));
 
       from = t.status;
       t.status = dto.to;
@@ -315,6 +424,10 @@ export class TasksService {
       await this.addEvent(m, saved, {
         type: 'TRANSITION', actorId, fromStatus: from, toStatus: dto.to, comment: dto.comment,
         location: toPoint(dto.lat, dto.lng), occurredAt, source: opts.source,
+        // Traçabilité du mode de saisie : un QR FieldOps porte son préfixe, une saisie manuelle non.
+        data: assetScanned
+          ? { assetScanned: taskAssetCode, assetScanMethod: dto.assetCode!.trim().toUpperCase().startsWith(ASSET_QR_PREFIX) ? 'QR' : 'MANUAL' }
+          : undefined,
       });
       return saved;
     });
@@ -430,14 +543,14 @@ export class TasksService {
   }
 
   applyVisibility(qb: any, user: AuthUser) {
-    if (roleHasPermission(user.role, Permission.TASK_READ_ALL)) return;
+    if (userHasPermission(user, Permission.TASK_READ_ALL)) return;
     if (user.role === Role.AGENT) qb.andWhere('t.agentId = :me', { me: user.id });
     else if (user.role === Role.CLIENT) qb.andWhere('t.clientId = :cid', { cid: user.clientId });
     else qb.andWhere('1 = 0');
   }
 
   assertCanView(user: AuthUser, t: Task) {
-    if (roleHasPermission(user.role, Permission.TASK_READ_ALL)) return;
+    if (userHasPermission(user, Permission.TASK_READ_ALL)) return;
     if (user.role === Role.AGENT && t.agentId === user.id) return;
     if (user.role === Role.CLIENT && t.clientId === user.clientId) return;
     throw new ForbiddenException('Accès non autorisé à cette intervention');
@@ -445,13 +558,13 @@ export class TasksService {
 
   assertCanExecute(user: AuthUser, t: Task) {
     if (user.role === Role.AGENT && t.agentId !== user.id) throw new ForbiddenException("Réservé à l'agent affecté");
-    if (!roleHasPermission(user.role, Permission.TASK_EXECUTE)) throw new ForbiddenException();
+    if (!userHasPermission(user, Permission.TASK_EXECUTE)) throw new ForbiddenException();
     if (TERMINAL_STATUSES.includes(t.status)) throw new UnprocessableEntityException('Intervention clôturée');
   }
 
   payload(t: Task, actorId?: string | null): TaskEventPayload {
     return {
-      organizationId: t.organizationId, taskId: t.id, reference: t.reference, title: t.title, status: t.status,
+      organizationId: t.organizationId, taskId: t.id, reference: t.reference, title: t.title, taskTitle: t.title, status: t.status,
       agentId: t.agentId, clientId: t.clientId, siteId: t.siteId, actorId,
     };
   }

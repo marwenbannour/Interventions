@@ -1,4 +1,4 @@
-name: CI backend
+name: CI
 
 on:
   push:
@@ -10,8 +10,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  backend:
+    name: Backend (NestJS)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fieldops-backend/backend
     services:
       postgres:
         image: postgis/postgis:16-3.4
@@ -46,12 +50,14 @@ jobs:
       S3_SECRET_KEY: minioadmin
       S3_FORCE_PATH_STYLE: "true"
       THROTTLE_LIMIT: "10000"
+      # V3 : le test de bout en bout reçoit les webhooks sur 127.0.0.1 (hors production : autorisé)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: fieldops-backend/backend/package-lock.json
       - run: npm ci
       - name: Vérification des types
         run: npm run lint
@@ -79,8 +85,51 @@ jobs:
         if: failure()
         run: cat api.log || true
 
+
+  web:
+    name: Console web (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fieldops-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: fieldops-web/package-lock.json
+      - run: npm ci
+      - name: Types des routes (LayoutProps…)
+        run: npx next typegen
+      - name: Vérification des types
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npx eslint src
+      - name: Build de production
+        run: npx next build
+
+  mobile:
+    name: Application mobile (Expo)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fieldops-mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: fieldops-mobile/package-lock.json
+      - run: npm ci
+      - name: Vérification des types
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npx expo lint
+
   docker:
-    needs: test
+    needs: [backend, web, mobile]
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     permissions:
@@ -96,7 +145,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: fieldops-backend/backend
           push: true
           tags: |
             ghcr.io/${{ github.repository }}/fieldops-api:${{ github.sha }}

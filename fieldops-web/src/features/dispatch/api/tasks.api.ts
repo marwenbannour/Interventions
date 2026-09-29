@@ -1,6 +1,6 @@
 import { apiFetch } from '@/lib/api/client';
 import type { Paginated } from '@/lib/api/types';
-import type { TaskDetail, TaskEvent, TaskListItem, TaskQuery } from '../types';
+import type { CreateTaskInput, TaskDetail, TaskEvent, TaskListItem, TaskQuery, TaskReportLink } from '../types';
 
 function toQueryString(query: TaskQuery): string {
   const search = new URLSearchParams();
@@ -22,4 +22,8 @@ export const tasksApi = {
   transition: (id: string, to: string, comment?: string) =>
     apiFetch<unknown>(`/tasks/${id}/transition`, { method: 'POST', body: { to, comment } }),
   addNote: (id: string, text: string) => apiFetch<TaskEvent>(`/tasks/${id}/notes`, { method: 'POST', body: { text } }),
+  // ---- V3
+  create: (input: CreateTaskInput) => apiFetch<TaskListItem>('/tasks', { method: 'POST', body: input }),
+  report: (id: string) => apiFetch<TaskReportLink>(`/tasks/${id}/report`),
+  generateReport: (id: string) => apiFetch<TaskReportLink>(`/tasks/${id}/report`, { method: 'POST' }),
 };

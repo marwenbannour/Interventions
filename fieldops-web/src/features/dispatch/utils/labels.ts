@@ -44,18 +44,30 @@ export const priorityBadgeVariant = (priority: TaskPriority): 'destructive' | 'd
   return 'secondary';
 };
 
+const ORIGIN_LABELS: Record<string, string> = {
+  MANUAL: 'Saisie opérateur',
+  CLIENT_REQUEST: 'Demande client',
+  PREVENTIVE: 'Maintenance préventive',
+  API: 'Intégration (API)',
+};
+export const originLabel = (origin: string): string => ORIGIN_LABELS[origin] ?? origin;
+
 export function eventSummary(event: TaskEvent): string {
   switch (event.type) {
     case 'CREATED':
       return 'Intervention créée';
     case 'TRANSITION':
+      if (event.data?.assetScanned) {
+        const how = event.data.assetScanMethod === 'MANUAL' ? 'code saisi manuellement' : 'QR scanné';
+        return `${statusLabel(event.fromStatus ?? '')} → ${statusLabel(event.toStatus ?? '')} (${String(event.data.assetScanned)} — ${how})`;
+      }
       return event.fromStatus && event.toStatus
         ? `${statusLabel(event.fromStatus)} → ${statusLabel(event.toStatus)}`
         : event.toStatus
           ? `Passage à « ${statusLabel(event.toStatus)} »`
           : 'Changement de statut';
     case 'ASSIGNED':
-      return 'Affectée à un agent';
+      return event.data?.auto ? 'Affectée automatiquement (auto-dispatch)' : 'Affectée à un agent';
     case 'UNASSIGNED':
       return 'Désaffectée';
     case 'CHECKLIST':
@@ -72,6 +84,8 @@ export function eventSummary(event: TaskEvent): string {
       return 'Intervention modifiée';
     case 'SLA_BREACH':
       return 'Dépassement de délai SLA';
+    case 'REPORT_GENERATED':
+      return event.data?.regenerated ? "Rapport d'intervention régénéré" : "Rapport d'intervention généré";
     default:
       return event.type;
   }

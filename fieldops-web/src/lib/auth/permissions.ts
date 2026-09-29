@@ -44,6 +44,34 @@ export function canReadSla(role: Role): boolean {
   return SLA_READ_ROLES.includes(role);
 }
 
+/** V3 — TASK_CREATE : ADMIN + SUPERVISOR. */
+export function canCreateTasks(role: Role): boolean {
+  return TASK_ASSIGN_ROLES.includes(role);
+}
+
+/** V3 — ASSET_READ côté console (AGENT/CLIENT y ont accès via mobile/API mais pas au backoffice). */
+export function canReadAssets(role: Role): boolean {
+  return (['ADMIN', 'SUPERVISOR', 'DIRECTION'] as Role[]).includes(role);
+}
+
+/** V3 — ASSET_MANAGE / MAINTENANCE_MANAGE : ADMIN + SUPERVISOR. */
+export function canManageAssets(role: Role): boolean {
+  return TASK_ASSIGN_ROLES.includes(role);
+}
+
+export function canReadMaintenance(role: Role): boolean {
+  return canReadAssets(role);
+}
+
+export function canManageMaintenance(role: Role): boolean {
+  return TASK_ASSIGN_ROLES.includes(role);
+}
+
+/** V3 — TASK_UPDATE (régénération du rapport). */
+export function canRegenerateReport(role: Role): boolean {
+  return TASK_ASSIGN_ROLES.includes(role);
+}
+
 /** SLA_MANAGE — ADMIN seul peut créer/modifier une politique SLA. */
 export function canManageSla(role: Role): boolean {
   return role === 'ADMIN';

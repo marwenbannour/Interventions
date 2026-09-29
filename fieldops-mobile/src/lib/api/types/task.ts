@@ -18,6 +18,22 @@ export type StandardTaskStatus =
 export const TERMINAL_STATUSES: readonly string[] = ['COMPLETED', 'EVALUATED', 'CANCELLED'];
 
 export type PhotoType = 'BEFORE' | 'AFTER' | 'PROOF' | 'SIGNATURE' | 'DOCUMENT' | 'ANOMALY';
+
+/** V3 — origine de l'intervention. */
+export type TaskOrigin = 'MANUAL' | 'CLIENT_REQUEST' | 'PREVENTIVE' | 'API';
+
+/** V3 — équipement rattaché (relation `asset` du pull). */
+export interface AssetSnapshot {
+  id: string;
+  code: string;
+  name: string;
+  category?: string | null;
+  location?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  serialNumber?: string | null;
+  status: 'ACTIVE' | 'OUT_OF_SERVICE' | 'RETIRED';
+}
 export type PhotoValidation = 'PENDING' | 'VALIDATED' | 'REJECTED';
 
 export interface ChecklistItem {
@@ -134,6 +150,12 @@ export interface Task {
   signatureKey?: string | null;
   signedByName?: string | null;
   version: number;
+  // ---- V3 (absents d'un serveur V2 : tous optionnels)
+  origin?: TaskOrigin;
+  assetId?: string | null;
+  asset?: AssetSnapshot | null;
+  isRework?: boolean;
+  reworkOfTaskId?: string | null;
 }
 
 export interface TaskDetail extends Task {
@@ -149,6 +171,8 @@ export interface AvailableTransition {
   requiresLocation: boolean;
   requiredPhotos: PhotoType[];
   requiresSignature: boolean;
+  /** V3 — scan du QR de l'équipement demandé au moment de l'action. */
+  requiresAssetScan: boolean;
 }
 
 export interface Paginated<T> {
@@ -171,6 +195,8 @@ export interface TransitionRequest {
   lat?: number;
   lng?: number;
   occurredAt?: string;
+  /** V3 — contenu du QR scanné (condition ASSET_SCAN). */
+  assetCode?: string;
 }
 
 export interface ChecklistUpdateRequest {
@@ -234,7 +260,8 @@ export type WorkflowConditionType =
   | 'CHECKLIST_COMPLETE'
   | 'COMMENT_REQUIRED'
   | 'GEOFENCE'
-  | 'SIGNATURE_REQUIRED';
+  | 'SIGNATURE_REQUIRED'
+  | 'ASSET_SCAN';
 
 export interface WorkflowCondition {
   type: WorkflowConditionType;

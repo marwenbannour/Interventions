@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { ActivityIndicator, Alert, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { colors } from '../../../theme/colors';
 import { submitTransition } from '../actions/taskActions';
+import { checkAssetScan } from '../../sync/engine/workflowEngine';
+import { AssetScanModal } from './AssetScanModal';
 import type { Task as TaskModel } from '../db/models/Task';
 import type { AvailableTransition } from '../../../lib/api/types';
 
@@ -22,8 +24,11 @@ export function TransitionButtons({ task, transitions }: Props) {
   const [commentModal, setCommentModal] = useState<AvailableTransition | null>(null);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
+  // V3 — scan QR : transition en attente du scan, puis code scanné conservé si un commentaire suit.
+  const [scanFor, setScanFor] = useState<AvailableTransition | null>(null);
+  const [scannedCode, setScannedCode] = useState<string | undefined>();
 
-  const run = async (transition: AvailableTransition, commentText?: string) => {
+  const run = async (transition: AvailableTransition, commentText?: string, assetCode?: string) => {
     setBusy(true);
     try {
       let lat: number | undefined;
@@ -40,9 +45,10 @@ export function TransitionButtons({ task, transitions }: Props) {
         lat = pos.lat;
         lng = pos.lng;
       }
-      await submitTransition(task, { to: transition.to, comment: commentText, lat, lng });
+      await submitTransition(task, { to: transition.to, comment: commentText, lat, lng, assetCode });
       setCommentModal(null);
       setComment('');
+      setScannedCode(undefined);
     } catch (error) {
       Alert.alert('Erreur', error instanceof Error ? error.message : 'Action impossible pour le moment.');
     } finally {
@@ -55,12 +61,38 @@ export function TransitionButtons({ task, transitions }: Props) {
       Alert.alert(transition.label, transition.missing.join('\n'));
       return;
     }
+    if (transition.requiresAssetScan) {
+      setScannedCode(undefined);
+      setScanFor(transition);
+      return;
+    }
     if (transition.requiresComment) {
       setComment('');
       setCommentModal(transition);
       return;
     }
     run(transition);
+  };
+
+  const onScanned = (code: string) => {
+    const transition = scanFor;
+    setScanFor(null);
+    if (!transition) return;
+    // Contrôle local immédiat (hors-ligne) ; le serveur revérifie à la synchronisation.
+    if (!checkAssetScan(task.asset?.code, code)) {
+      Alert.alert(
+        'Équipement différent',
+        "Ce QR code ne correspond pas à l'équipement de l'intervention. Vérifiez que vous êtes devant le bon équipement.",
+      );
+      return;
+    }
+    if (transition.requiresComment) {
+      setScannedCode(code);
+      setComment('');
+      setCommentModal(transition);
+      return;
+    }
+    run(transition, undefined, code);
   };
 
   if (transitions.length === 0) return null;
@@ -82,6 +114,8 @@ export function TransitionButtons({ task, transitions }: Props) {
         </TouchableOpacity>
       ))}
 
+      <AssetScanModal visible={!!scanFor} asset={task.asset} onScanned={onScanned} onCancel={() => setScanFor(null)} />
+
       <Modal visible={!!commentModal} transparent animationType="fade" onRequestClose={() => setCommentModal(null)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -99,7 +133,7 @@ export function TransitionButtons({ task, transitions }: Props) {
                 <Text style={styles.modalCancelText}>Annuler</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => commentModal && run(commentModal, comment.trim())}
+                onPress={() => commentModal && run(commentModal, comment.trim(), scannedCode)}
                 style={[styles.modalConfirm, comment.trim().length < 3 && styles.buttonDisabled]}
                 disabled={comment.trim().length < 3 || busy}
               >

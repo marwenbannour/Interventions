@@ -43,13 +43,15 @@ export class ReportsService {
   async dashboard(user: AuthUser, q: ReportQueryDto) {
     const s = this.scope(user, q);
     const org = user.organizationId;
-    const [byStatus, totals, today, agents, rating] = await Promise.all([
+    const [byStatus, totals, today, agents, rating, byOrigin] = await Promise.all([
       this.ds.query(`SELECT status, COUNT(*)::int AS count FROM tasks t WHERE ${s.where} GROUP BY status ORDER BY count DESC`, s.params),
       this.ds.query(
         `SELECT COUNT(*)::int AS total,
                 COUNT(*) FILTER (WHERE status IN ('COMPLETED','EVALUATED'))::int AS completed,
                 COUNT(*) FILTER (WHERE status = 'CANCELLED')::int AS cancelled,
                 COUNT(*) FILTER (WHERE "ackBreached" OR "arrivalBreached" OR "interventionBreached" OR "closeBreached")::int AS "slaBreached",
+                COUNT(*) FILTER (WHERE "isRework")::int AS reworks,
+                COUNT(*) FILTER (WHERE origin != 'PREVENTIVE')::int AS corrective,
                 AVG(EXTRACT(EPOCH FROM ("completedAt" - "startedAt")) / 60) FILTER (WHERE "completedAt" IS NOT NULL AND "startedAt" IS NOT NULL) AS "avgInterventionMin",
                 AVG(EXTRACT(EPOCH FROM ("arrivedAt" - "createdAt")) / 60) FILTER (WHERE "arrivedAt" IS NOT NULL) AS "avgArrivalMin"
            FROM tasks t WHERE ${s.where}`,
@@ -73,6 +75,7 @@ export class ReportsService {
            FROM evaluations e JOIN tasks t ON t.id = e."taskId" WHERE ${s.where}`,
         s.params,
       ),
+      this.ds.query(`SELECT origin, COUNT(*)::int AS count FROM tasks t WHERE ${s.where} GROUP BY origin ORDER BY count DESC`, s.params),
     ]);
     const t = totals[0];
     return {
@@ -87,6 +90,10 @@ export class ReportsService {
         avgInterventionMin: num(t.avgInterventionMin),
         avgArrivalMin: num(t.avgArrivalMin),
         byStatus,
+        // V3 — §9 réinterventions (sur les interventions correctives : le préventif est planifié par nature)
+        reworks: t.reworks,
+        reworkRate: t.corrective ? pct(t.reworks / t.corrective) : null,
+        byOrigin,
       },
       today: user.role === Role.CLIENT ? undefined : today[0],
       agents: user.role === Role.CLIENT ? undefined : agents[0],
@@ -145,7 +152,11 @@ export class ReportsService {
               AVG(EXTRACT(EPOCH FROM (t."arrivedAt" - t."enRouteAt")) / 60) FILTER (WHERE t."arrivedAt" IS NOT NULL AND t."enRouteAt" IS NOT NULL) AS "avgTravelMin",
               AVG(e.rating)::float AS "avgRating",
               COUNT(e.id)::int AS evaluations,
-              COUNT(t.id) FILTER (WHERE t."ackBreached" OR t."arrivalBreached" OR t."interventionBreached" OR t."closeBreached")::int AS "slaBreached"
+              COUNT(t.id) FILTER (WHERE t."ackBreached" OR t."arrivalBreached" OR t."interventionBreached" OR t."closeBreached")::int AS "slaBreached",
+              -- V3 : réinterventions imputées à l'agent de l'intervention d'origine
+              -- (interventions d'origine distinctes : un même travail repris deux fois compte une fois)
+              (SELECT COUNT(DISTINCT o.id)::int FROM tasks r JOIN tasks o ON o.id = r."reworkOfTaskId"
+                WHERE r."organizationId" = $1 AND r."createdAt" BETWEEN $2 AND $3 AND o."agentId" = u.id) AS reworks
          FROM agent_profiles a
          JOIN users u ON u.id = a."userId"
          LEFT JOIN tasks t ON t."agentId" = a."userId" AND ${s.where}
@@ -168,6 +179,8 @@ export class ReportsService {
         avgRating: num(r.avgRating, 2),
         evaluations: r.evaluations,
         slaBreached: r.slaBreached,
+        reworks: r.reworks,
+        reworkRate: r.completed ? pct(r.reworks / r.completed) : null,
       })),
     };
   }

@@ -26,6 +26,8 @@ export default () => ({
   },
   s3: {
     endpoint: process.env.S3_ENDPOINT || undefined,
+    // Hôte des URL signées remises aux navigateurs/apps, si différent de l'hôte interne (ex. Docker).
+    publicEndpoint: process.env.S3_PUBLIC_ENDPOINT || undefined,
     region: process.env.S3_REGION ?? 'eu-west-3',
     bucket: process.env.S3_BUCKET ?? 'fieldops-proofs',
     accessKey: process.env.S3_ACCESS_KEY,

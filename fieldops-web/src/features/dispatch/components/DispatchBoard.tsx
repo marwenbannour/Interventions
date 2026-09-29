@@ -1,10 +1,13 @@
 'use client';
 
-import { Kanban, Table2 } from 'lucide-react';
+import { Kanban, Plus, Table2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { useSessionStore } from '@/features/auth/store/session.store';
+import { canCreateTasks } from '@/lib/auth/permissions';
 import { useDispatchRealtimeSync } from '../hooks/useDispatchRealtimeSync';
+import { CreateTaskDialog } from './CreateTaskDialog';
 import { KanbanBoard } from './KanbanBoard';
 import { TaskDetailPanel } from './TaskDetailPanel';
 import { TasksTable } from './TasksTable';
@@ -13,6 +16,8 @@ type ViewMode = 'kanban' | 'table';
 
 export function DispatchBoard() {
   const [view, setView] = useState<ViewMode>('kanban');
+  const [createOpen, setCreateOpen] = useState(false);
+  const role = useSessionStore((s) => s.user?.role);
   useDispatchRealtimeSync();
 
   const router = useRouter();
@@ -29,6 +34,13 @@ export function DispatchBoard() {
             {view === 'kanban' ? 'Planning par agent.' : 'Recherche et filtres sur toutes les interventions.'}
           </p>
         </div>
+        <div className="flex items-center gap-2">
+        {role && canCreateTasks(role) && (
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" />
+            Nouvelle intervention
+          </Button>
+        )}
         <div className="flex gap-1 rounded-lg border border-border p-0.5">
           <Button
             variant={view === 'kanban' ? 'default' : 'ghost'}
@@ -49,11 +61,17 @@ export function DispatchBoard() {
             Tableau
           </Button>
         </div>
+        </div>
       </div>
 
       {view === 'kanban' ? <KanbanBoard /> : <TasksTable />}
 
       {deepLinkedTaskId && <TaskDetailPanel taskId={deepLinkedTaskId} onClose={clearDeepLink} />}
+      <CreateTaskDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(id) => router.replace(`/dispatch?taskId=${id}`)}
+      />
     </div>
   );
 }

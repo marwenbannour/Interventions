@@ -1,11 +1,11 @@
 import { ApiProperty, ApiPropertyOptional, PartialType, PickType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsEnum, IsInt, IsLatitude, IsLongitude, IsOptional, IsString, IsUUID,
   MaxLength, Min, ValidateNested,
 } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
-import { TaskPriority } from '../../../common/enums/task.enums';
+import { TaskOrigin, TaskPriority } from '../../../common/enums/task.enums';
 
 export class ChecklistItemInputDto {
   @ApiPropertyOptional() @IsOptional() @IsString() id?: string;
@@ -27,7 +27,18 @@ export class CreateTaskDto {
   @IsOptional() @IsArray() @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => ChecklistItemInputDto)
   checklist?: ChecklistItemInputDto[];
   @ApiPropertyOptional({ description: 'Affectation immédiate' }) @IsOptional() @IsUUID() agentId?: string;
-  @ApiPropertyOptional({ description: "Réintervention : tâche d'origine" }) @IsOptional() @IsUUID() parentTaskId?: string;
+  @ApiPropertyOptional({ description: 'Intervention liée (suite, deuxième passage)' }) @IsOptional() @IsUUID() parentTaskId?: string;
+  @ApiPropertyOptional({ description: 'V3 — équipement concerné (doit appartenir au site)' }) @IsOptional() @IsUUID() assetId?: string;
+}
+
+/** V3 — demande d'intervention émise depuis le portail client. */
+export class ServiceRequestDto {
+  @ApiProperty() @IsUUID() siteId: string;
+  @ApiProperty() @IsString() @MaxLength(200) title: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(5000) description?: string;
+  @ApiPropertyOptional({ enum: TaskPriority, default: TaskPriority.NORMAL }) @IsOptional() @IsEnum(TaskPriority) priority?: TaskPriority;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() assetId?: string;
+  @ApiPropertyOptional({ description: 'Créneau souhaité' }) @IsOptional() @IsDateString() preferredDate?: string;
 }
 
 export class UpdateTaskDto extends PartialType(
@@ -44,9 +55,11 @@ export class TransitionDto {
   @ApiPropertyOptional() @IsOptional() @IsLatitude() lat?: number;
   @ApiPropertyOptional() @IsOptional() @IsLongitude() lng?: number;
   @ApiPropertyOptional({ description: 'Horodatage terrain (offline)' }) @IsOptional() @IsDateString() occurredAt?: string;
+  @ApiPropertyOptional({ description: 'V3 — code équipement scanné (QR), exigé par la condition ASSET_SCAN' })
+  @IsOptional() @IsString() @MaxLength(120) assetCode?: string;
 }
 
-export class ActionDto extends PickType(TransitionDto, ['comment', 'lat', 'lng', 'occurredAt'] as const) {}
+export class ActionDto extends PickType(TransitionDto, ['comment', 'lat', 'lng', 'occurredAt', 'assetCode'] as const) {}
 
 export class ChecklistUpdateItemDto {
   @ApiProperty() @IsString() id: string;
@@ -76,8 +89,13 @@ export class TaskQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
   @ApiPropertyOptional({ description: 'Uniquement les tâches actives (non terminales)' })
-  @IsOptional() @Type(() => Boolean) @IsBoolean() active?: boolean;
+  @IsOptional() @Transform(({ value }) => value === true || value === 'true') @IsBoolean() active?: boolean;
   @ApiPropertyOptional({ description: 'Uniquement les tâches en dépassement SLA' })
-  @IsOptional() @Type(() => Boolean) @IsBoolean() slaBreached?: boolean;
+  @IsOptional() @Transform(({ value }) => value === true || value === 'true') @IsBoolean() slaBreached?: boolean;
   @ApiPropertyOptional({ description: 'Modifiées depuis (synchro incrémentale)' }) @IsOptional() @IsDateString() updatedSince?: string;
+  // ---- V3
+  @ApiPropertyOptional() @IsOptional() @IsUUID() assetId?: string;
+  @ApiPropertyOptional({ enum: TaskOrigin }) @IsOptional() @IsEnum(TaskOrigin) origin?: TaskOrigin;
+  @ApiPropertyOptional({ description: 'Uniquement les réinterventions' })
+  @IsOptional() @Transform(({ value }) => value === true || value === 'true') @IsBoolean() rework?: boolean;
 }

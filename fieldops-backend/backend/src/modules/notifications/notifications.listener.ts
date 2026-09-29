@@ -36,7 +36,8 @@ export class NotificationsListener {
   @OnEvent(Events.WORKFLOW_NOTIFY, { async: true, promisify: true })
   async onWorkflowNotify(p: WorkflowNotifyPayload) {
     const userIds = await this.resolveTargets(p.organizationId, p.targets, p);
-    const render = (s: string) => s.replace('{reference}', p.reference).replace('{title}', p.title).replace('{status}', p.status);
+    const render = (s: string) =>
+      s.replaceAll('{reference}', p.reference).replaceAll('{title}', p.taskTitle ?? p.title).replaceAll('{status}', p.status);
     await this.notifications.notify({
       organizationId: p.organizationId,
       userIds,

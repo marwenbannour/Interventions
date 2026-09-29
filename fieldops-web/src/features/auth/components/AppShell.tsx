@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, Bell, Building2, Clock, LayoutGrid, LogOut, MapPin, ShieldCheck, Wrench } from 'lucide-react';
+import { BarChart3, Bell, Building2, CalendarClock, Clock, Cog, LayoutGrid, LogOut, MapPin, ShieldCheck, Wrench } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { NotificationBell } from '@/features/notifications/components/NotificationBell';
 import { disconnectSocket } from '@/lib/realtime/socket';
 import { useRealtimeConnection } from '@/lib/realtime/useRealtimeConnection';
-import { canReadSla, isAdmin } from '@/lib/auth/permissions';
+import { canReadAssets, canReadMaintenance, canReadSla, isAdmin } from '@/lib/auth/permissions';
 import { authApi } from '../api/auth.api';
 import { useSessionStore } from '../store/session.store';
 import { ConnectionIndicator } from './ConnectionIndicator';
@@ -76,7 +76,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const initials = `${user.firstName[0] ?? ''}${user.lastName[0] ?? ''}`.toUpperCase();
   const items = [
-    ...navItems,
+    ...navItems.slice(0, 3),
+    ...(canReadAssets(user.role) ? [{ href: '/assets', label: 'Équipements', icon: Cog }] : []),
+    ...(canReadMaintenance(user.role) ? [{ href: '/maintenance', label: 'Maintenance', icon: CalendarClock }] : []),
+    ...navItems.slice(3),
     ...(canReadSla(user.role) ? [{ href: '/sla', label: 'SLA', icon: Clock }] : []),
     ...(isAdmin(user.role) ? [{ href: '/admin', label: 'Admin', icon: Wrench }] : []),
   ];

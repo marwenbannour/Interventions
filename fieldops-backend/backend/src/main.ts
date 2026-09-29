@@ -1,4 +1,5 @@
-import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
+import { ConsoleLogger, Logger, ValidationPipe, VersioningType } from '@nestjs/common';
+import * as Sentry from '@sentry/node';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -8,7 +9,17 @@ import { AppModule } from './app.module';
 import { RedisIoAdapter } from './modules/realtime/redis-io.adapter';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: false });
+  // V3 §20 — suivi d'erreurs (optionnel) et logs JSON pour la centralisation (Loki, ELK, CloudWatch…).
+  if (process.env.SENTRY_DSN) {
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.NODE_ENV,
+      release: process.env.APP_VERSION,
+      tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0),
+    });
+  }
+  const logger = new ConsoleLogger({ json: process.env.LOG_FORMAT === 'json', prefix: 'FieldOps' });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger });
   const cfg = app.get(ConfigService);
   const prefix = cfg.get<string>('apiPrefix') ?? 'api';
 
@@ -41,7 +52,7 @@ async function bootstrap() {
         'API REST v1 (§13 du cahier des charges). Authentification JWT Bearer ; ' +
           'temps réel via Socket.IO namespace /realtime.',
       )
-      .setVersion('2.0')
+      .setVersion('3.0')
       .addBearerAuth()
       .build();
     SwaggerModule.setup(`${prefix}/docs`, app, SwaggerModule.createDocument(app, doc), {

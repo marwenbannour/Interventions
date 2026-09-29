@@ -14,6 +14,12 @@ export interface OrganizationSettings {
   defaultGeofenceMeters: number;
   /** Rôles pour lesquels la MFA est obligatoire. */
   mfaRequiredRoles: string[];
+  /** V3 — fenêtre (jours) de détection des réinterventions ; 0 = désactivé. */
+  reworkWindowDays: number;
+  /** V3 — affectation automatique au meilleur agent suggéré. */
+  autoDispatch: { enabled: boolean; minScore: number; onlyOnDuty: boolean };
+  /** V3 — type d'intervention attribué aux demandes du portail client. */
+  clientRequestTaskType: string;
 }
 
 export const DEFAULT_ORG_SETTINGS: OrganizationSettings = {
@@ -24,6 +30,9 @@ export const DEFAULT_ORG_SETTINGS: OrganizationSettings = {
   locationRetentionDays: 90,
   defaultGeofenceMeters: 300,
   mfaRequiredRoles: [],
+  reworkWindowDays: 30,
+  autoDispatch: { enabled: false, minScore: 0.5, onlyOnDuty: true },
+  clientRequestTaskType: 'MAINTENANCE',
 };
 
 /** Tenant (§14). */

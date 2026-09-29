@@ -1,6 +1,12 @@
 import { ApiPropertyOptional, ApiProperty, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsInt, IsOptional, IsString, IsUUID, Max, Min, MaxLength, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min, MaxLength, ValidateNested } from 'class-validator';
+
+export class AutoDispatchSettingsDto {
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() enabled?: boolean;
+  @ApiPropertyOptional({ minimum: 0, maximum: 1 }) @IsOptional() @IsNumber() @Min(0) @Max(1) minScore?: number;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() onlyOnDuty?: boolean;
+}
 
 export class UpdateOrganizationSettingsDto {
   @ApiPropertyOptional() @IsOptional() @IsString() timezone?: string;
@@ -10,6 +16,10 @@ export class UpdateOrganizationSettingsDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) locationRetentionDays?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(10) @Max(5000) defaultGeofenceMeters?: number;
   @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) mfaRequiredRoles?: string[];
+  @ApiPropertyOptional({ minimum: 0, maximum: 365 }) @IsOptional() @IsInt() @Min(0) @Max(365) reworkWindowDays?: number;
+  @ApiPropertyOptional({ type: AutoDispatchSettingsDto })
+  @IsOptional() @ValidateNested() @Type(() => AutoDispatchSettingsDto) autoDispatch?: AutoDispatchSettingsDto;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) clientRequestTaskType?: string;
 }
 
 export class UpdateOrganizationDto {

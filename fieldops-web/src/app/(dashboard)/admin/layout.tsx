@@ -8,6 +8,7 @@ const tabs = [
   { href: '/admin/organization', label: 'Organisation' },
   { href: '/admin/users', label: 'Comptes' },
   { href: '/admin/workflows', label: 'Workflows' },
+  { href: '/admin/integrations', label: 'Intégrations' },
   { href: '/admin/audit', label: 'Audit' },
 ];
 

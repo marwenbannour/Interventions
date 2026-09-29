@@ -52,7 +52,7 @@ export function ReportFilters({ query, onChange }: { query: ReportQuery; onChang
           onValueChange={(value) => onChange({ ...query, clientId: value && value !== ALL ? value : undefined })}
         >
           <SelectTrigger className="w-52">
-            <SelectValue placeholder="Tous les clients" />
+            <SelectValue>{clients.find((c) => c.id === query.clientId)?.name ?? 'Tous les clients'}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>Tous les clients</SelectItem>

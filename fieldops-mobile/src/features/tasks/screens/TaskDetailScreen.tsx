@@ -6,7 +6,7 @@ import { of } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { database } from '../../../lib/db/database';
 import { colors } from '../../../theme/colors';
-import { priorityLabel, statusLabel } from '../utils/statusLabels';
+import { originLabel, priorityLabel, statusLabel } from '../utils/statusLabels';
 import { ChecklistCard } from '../components/ChecklistCard';
 import { HistorySection } from '../components/HistorySection';
 import { NotesSection } from '../components/NotesSection';
@@ -60,6 +60,20 @@ function TaskDetailScreenBase({ task, navigation }: Props) {
       <View style={styles.card}>
         <Text style={styles.title}>{task.title}</Text>
         {task.description ? <Text style={styles.description}>{task.description}</Text> : null}
+        {originLabel(task.origin) || task.isRework ? (
+          <View style={styles.badges}>
+            {originLabel(task.origin) ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{originLabel(task.origin)}</Text>
+              </View>
+            ) : null}
+            {task.isRework ? (
+              <View style={[styles.badge, styles.badgeDanger]}>
+                <Text style={[styles.badgeText, styles.badgeDangerText]}>Réintervention</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
         <InfoRow label="Statut" value={statusLabel(task.status)} />
         <InfoRow label="Priorité" value={priorityLabel(task.priority)} />
         <InfoRow label="Type" value={task.type} />
@@ -67,6 +81,21 @@ function TaskDetailScreenBase({ task, navigation }: Props) {
         <InfoRow label="Adresse" value={task.site?.address ?? '—'} />
         <InfoRow label="Client" value={task.client?.name ?? '—'} />
       </View>
+
+      {task.asset ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Équipement</Text>
+          <InfoRow label="Équipement" value={task.asset.name} />
+          {task.asset.location ? <InfoRow label="Emplacement" value={task.asset.location} /> : null}
+          {task.asset.brand || task.asset.model ? (
+            <InfoRow label="Modèle" value={[task.asset.brand, task.asset.model].filter(Boolean).join(' · ')} />
+          ) : null}
+          {task.asset.serialNumber ? <InfoRow label="N° de série" value={task.asset.serialNumber} /> : null}
+          {transitions.some((t) => t.requiresAssetScan) ? (
+            <Text style={styles.hint}>Le QR code de l&apos;équipement vous sera demandé pour démarrer l&apos;intervention.</Text>
+          ) : null}
+        </View>
+      ) : null}
 
       {hasContactInfo && (
         <View style={styles.card}>
@@ -131,6 +160,12 @@ const styles = StyleSheet.create({
   content: { padding: 16, gap: 12 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   emptyText: { color: colors.textMuted, fontSize: 15 },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  badge: { backgroundColor: '#EEF2FF', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeText: { color: colors.primary, fontSize: 12, fontWeight: '600' },
+  badgeDanger: { backgroundColor: '#FEE2E2' },
+  badgeDangerText: { color: colors.danger },
+  hint: { color: colors.textMuted, fontSize: 12, marginTop: 6 },
   pendingBanner: {
     backgroundColor: '#FEF3C7',
     borderRadius: 8,

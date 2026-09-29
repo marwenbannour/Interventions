@@ -1,6 +1,7 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne, VersionColumn } from 'typeorm';
 import { TenantBaseEntity } from '../../../common/entities/tenant-base.entity';
-import { TaskPriority } from '../../../common/enums/task.enums';
+import { TaskOrigin, TaskPriority } from '../../../common/enums/task.enums';
+import { Asset } from '../../assets/entities/asset.entity';
 import { Client } from '../../clients/entities/client.entity';
 import { Site } from '../../clients/entities/site.entity';
 import { User } from '../../users/entities/user.entity';
@@ -20,6 +21,8 @@ export interface ChecklistItem {
 @Index(['organizationId', 'reference'], { unique: true })
 @Index(['organizationId', 'status'])
 @Index(['organizationId', 'agentId', 'status'])
+// V3 — une occurrence de plan préventif n'est générée qu'une fois, même avec plusieurs instances de l'API.
+@Index(['maintenancePlanId', 'scheduledStart'], { unique: true, where: '"maintenancePlanId" IS NOT NULL' })
 export class Task extends TenantBaseEntity {
   @Column()
   reference: string;
@@ -82,9 +85,44 @@ export class Task extends TenantBaseEntity {
   @Column({ type: 'jsonb', default: () => "'[]'" })
   checklist: ChecklistItem[];
 
-  /** Réintervention : tâche d'origine (§9 indicateur réintervention). */
+  /** Intervention liée explicitement (suite, deuxième passage…). */
   @Column('uuid', { nullable: true })
   parentTaskId?: string | null;
+
+  // ---------- V3 ----------
+  @Column({ type: 'enum', enum: TaskOrigin, default: TaskOrigin.MANUAL })
+  origin: TaskOrigin;
+
+  /** Équipement concerné (V3). */
+  @Index()
+  @Column('uuid', { nullable: true })
+  assetId?: string | null;
+
+  @ManyToOne(() => Asset, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'assetId' })
+  asset?: Asset | null;
+
+  /** Plan de maintenance préventive à l'origine de la tâche (V3). */
+  @Column('uuid', { nullable: true })
+  maintenancePlanId?: string | null;
+
+  /** Réintervention détectée automatiquement (§9 indicateur réintervention). */
+  @Column({ default: false })
+  isRework: boolean;
+
+  @Index()
+  @Column('uuid', { nullable: true })
+  reworkOfTaskId?: string | null;
+
+  /** Rapport d'intervention PDF (V3) : clé S3, empreinte SHA-256, date de génération. */
+  @Column({ type: 'varchar', nullable: true })
+  reportKey?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  reportSha256?: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  reportGeneratedAt?: Date | null;
 
   // ---------- Planification ----------
   @Index()

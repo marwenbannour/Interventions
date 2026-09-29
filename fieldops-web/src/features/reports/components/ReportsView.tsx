@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, CalendarClock, CheckCircle2, Download, Loader2, Star, TimerReset, Users } from 'lucide-react';
+import { AlertTriangle, CalendarClock, CheckCircle2, Download, Loader2, RotateCcw, Star, TimerReset, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAgentsReport, useDashboardReport, useSitesReport, useSlaReport } from '../hooks/useReports';
@@ -12,6 +12,7 @@ import { ComplianceBarList } from './ComplianceBarList';
 import { ReportFilters } from './ReportFilters';
 import { SitesPerformanceTable } from './SitesPerformanceTable';
 import { StatTile } from './StatTile';
+import { originLabel } from '@/features/dispatch/utils/labels';
 
 function defaultQuery(): ReportQuery {
   const to = new Date();
@@ -41,7 +42,7 @@ export function ReportsView() {
           <Loader2 className="size-6 animate-spin" />
         </div>
       ) : dashboard ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
           <StatTile label="Interventions" value={dashboard.tasks.total} icon={CalendarClock} />
           <StatTile
             label="Taux de complétion"
@@ -73,9 +74,26 @@ export function ReportsView() {
             suffix={dashboard.satisfaction.avgRating != null ? `★ (${dashboard.satisfaction.evaluations})` : undefined}
             icon={Star}
           />
+          <StatTile
+            label="Réinterventions"
+            value={dashboard.tasks.reworkRate ?? '—'}
+            suffix={dashboard.tasks.reworkRate != null ? `% (${dashboard.tasks.reworks})` : undefined}
+            icon={RotateCcw}
+          />
           {dashboard.agents && <StatTile label="Agents en service" value={`${dashboard.agents.onDuty}/${dashboard.agents.active}`} icon={Users} />}
         </div>
       ) : null}
+
+      {dashboard && dashboard.tasks.byOrigin.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Origine des interventions :</span>
+          {dashboard.tasks.byOrigin.map((o) => (
+            <span key={o.origin} className="rounded-full bg-muted px-2 py-0.5">
+              {originLabel(o.origin)} · {o.count}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-foreground">Conformité SLA</p>

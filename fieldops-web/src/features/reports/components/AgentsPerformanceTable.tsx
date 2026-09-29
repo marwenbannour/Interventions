@@ -21,6 +21,7 @@ export function AgentsPerformanceTable({ rows }: { rows: AgentReportRow[] }) {
             <th className="px-4 py-2 font-medium text-right">Trajet moy.</th>
             <th className="px-4 py-2 font-medium text-right">Note</th>
             <th className="px-4 py-2 font-medium text-right">SLA dépassés</th>
+            <th className="px-4 py-2 font-medium text-right" title="Interventions de l'agent ayant nécessité une reprise">Reprises</th>
           </tr>
         </thead>
         <tbody>
@@ -34,11 +35,14 @@ export function AgentsPerformanceTable({ rows }: { rows: AgentReportRow[] }) {
               <td className="px-4 py-2 text-right tabular-nums">{fmtMin(r.avgTravelMin)}</td>
               <td className="px-4 py-2 text-right tabular-nums">{r.avgRating != null ? `${r.avgRating} ★` : '—'}</td>
               <td className="px-4 py-2 text-right tabular-nums text-destructive">{r.slaBreached || '—'}</td>
+              <td className="px-4 py-2 text-right tabular-nums">
+                {r.reworks ? `${r.reworks} (${fmtPct(r.reworkRate)})` : '—'}
+              </td>
             </tr>
           ))}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">
+              <td colSpan={9} className="px-4 py-6 text-center text-muted-foreground">
                 Aucune donnée sur la période.
               </td>
             </tr>

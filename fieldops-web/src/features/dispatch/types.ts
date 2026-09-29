@@ -14,6 +14,21 @@ export type TaskStatus =
 
 export type TaskPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 export type PhotoType = 'BEFORE' | 'AFTER' | 'PROOF' | 'SIGNATURE' | 'DOCUMENT' | 'ANOMALY';
+/** V3 — origine d'une intervention. */
+export type TaskOrigin = 'MANUAL' | 'CLIENT_REQUEST' | 'PREVENTIVE' | 'API';
+
+/** V3 — équipement tel que joint aux tâches (relation `asset`). */
+export interface AssetSnapshot {
+  id: string;
+  code: string;
+  name: string;
+  category?: string | null;
+  location?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  serialNumber?: string | null;
+  status: 'ACTIVE' | 'OUT_OF_SERVICE' | 'RETIRED';
+}
 
 export interface TaskSlim {
   id: string;
@@ -84,6 +99,8 @@ export interface AvailableTransition {
   requiresLocation: boolean;
   requiredPhotos: PhotoType[];
   requiresSignature: boolean;
+  /** V3 — l'agent devra scanner le QR de l'équipement (action mobile). */
+  requiresAssetScan?: boolean;
 }
 
 /** Colonne PostGIS geography(Point,4326) telle que renvoyée brute par TypeORM (coordinates: [lng, lat]). */
@@ -144,11 +161,46 @@ interface TaskCommon {
   site: SiteSnapshot | null;
   client: ClientSnapshot | null;
   agent: AgentSnapshot | null;
+  // ---- V3
+  origin: TaskOrigin;
+  assetId: string | null;
+  asset: AssetSnapshot | null;
+  maintenancePlanId: string | null;
+  isRework: boolean;
+  reworkOfTaskId: string | null;
+  reportGeneratedAt: string | null;
+  reportSha256: string | null;
 }
 
 export interface TaskDetail extends TaskCommon {
   photoCounts: PhotoCounts;
   availableTransitions: AvailableTransition[];
+  /** V3 */
+  hasReport: boolean;
+  reworkOf: { id: string; reference: string; completedAt: string | null; agentId: string | null } | null;
+}
+
+/** V3 — POST /tasks */
+export interface CreateTaskInput {
+  title: string;
+  description?: string;
+  type: string;
+  priority?: TaskPriority;
+  siteId: string;
+  assetId?: string;
+  scheduledStart?: string;
+  estimatedDurationMin?: number;
+  requiredSkills?: string[];
+  checklist?: { label: string; required?: boolean }[];
+  agentId?: string;
+}
+
+/** V3 — GET /tasks/:id/report */
+export interface TaskReportLink {
+  url: string;
+  sha256: string;
+  generatedAt: string;
+  expiresInSec: number;
 }
 
 /** GET /tasks (liste brute paginée) — mêmes entités que TaskDetail, sans photoCounts/availableTransitions,
@@ -199,6 +251,9 @@ export interface TaskQuery {
   search?: string;
   active?: boolean;
   slaBreached?: boolean;
+  origin?: TaskOrigin;
+  rework?: boolean;
+  assetId?: string;
   page?: number;
   limit?: number;
 }

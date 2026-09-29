@@ -13,6 +13,11 @@ import { DatabaseModule } from './database/database.module';
 import { RedisModule } from './infra/redis/redis.module';
 import { StorageModule } from './infra/storage/storage.module';
 import { AgentsModule } from './modules/agents/agents.module';
+import { AssetsModule } from './modules/assets/assets.module';
+import { DocumentsModule } from './modules/documents/documents.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { ObservabilityModule } from './modules/observability/observability.module';
 import { AuditInterceptor } from './modules/audit/audit.interceptor';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -83,6 +88,12 @@ import { WorkflowsModule } from './modules/workflows/workflows.module';
     ReportsModule,
     RealtimeModule,
     HealthModule,
+    // V3
+    AssetsModule,
+    MaintenanceModule,
+    DocumentsModule,
+    IntegrationsModule,
+    ObservabilityModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

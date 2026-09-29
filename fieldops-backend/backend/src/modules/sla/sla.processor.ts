@@ -27,7 +27,7 @@ export class SchedulerProcessor extends WorkerHost implements OnModuleInit {
   }
 
   async onModuleInit() {
-    if (process.env.NODE_ENV === 'test') return;
+    if (process.env.SCHEDULERS_ENABLED === 'false') return; // ex. workers dédiés, tests d'intégration
     await this.queue.upsertJobScheduler('sla-scan', { every: 60_000 }, { name: 'sla-scan' });
     await this.queue.upsertJobScheduler('retention-purge', { pattern: '0 3 * * *' }, { name: 'retention-purge' });
   }

@@ -33,3 +33,11 @@ const PHOTO_TYPE_LABELS: Record<string, string> = {
 export const statusLabel = (status: string): string => LABELS[status] ?? status;
 export const priorityLabel = (priority: string): string => PRIORITY_LABELS[priority] ?? priority;
 export const photoTypeLabel = (type: string): string => PHOTO_TYPE_LABELS[type] ?? type;
+
+/** V3 — origine de l'intervention (le préventif est surtout utile à afficher à l'agent). */
+const ORIGIN_LABELS: Record<string, string> = {
+  CLIENT_REQUEST: 'Demande client',
+  PREVENTIVE: 'Maintenance préventive',
+  API: 'Intégration',
+};
+export const originLabel = (origin: string | null | undefined): string | null => (origin ? ORIGIN_LABELS[origin] ?? null : null);

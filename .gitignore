@@ -6,3 +6,8 @@
 
 # Misc local artifacts
 fieldops-backend.zip
+dump.rdb
+
+# Copies et archives locales du projet
+/Interventions-V3/
+*.zip

@@ -1,10 +1,10 @@
 # FieldOps — Backend API
 
-API de la plateforme Enterprise de gestion des interventions terrain (transport de linge, maintenance, services), conforme au cahier des charges technique V2.0 du 22 septembre 2026.
+API de la plateforme Enterprise de gestion des interventions terrain (transport de linge, maintenance, services), conforme au cahier des charges technique **V3.0** du 27 septembre 2026 (voir [§11 Nouveautés V3](#11-nouveautés-v3)).
 
 Stack : NestJS 11 et TypeScript, PostgreSQL 16 + PostGIS, Redis (positions live, files BullMQ, pub/sub Socket.IO), stockage objet compatible S3, JWT et RBAC.
 
-L'API REST est versionnée sous `/api/v1`. La documentation OpenAPI interactive est sur `/api/docs`, et une copie statique se trouve dans `docs/openapi.json` (84 opérations), utilisable pour générer les clients web et mobile.
+L'API REST est versionnée sous `/api/v1`. La documentation OpenAPI interactive est sur `/api/docs`, et une copie statique se trouve dans `docs/openapi.json` (114 opérations), utilisable pour générer les clients web et mobile.
 
 ---
 
@@ -264,8 +264,8 @@ L'agent peut aussi émettre `location:update` (un point ou un tableau de points,
 
 ```bash
 npm run lint          # vérification des types TypeScript
-npm test              # tests unitaires (moteur de workflow : rôles, géofence, preuves, checklist, workflow linge)
-npm run test:smoke    # parcours de bout en bout sur une API démarrée et seedée (33 étapes)
+npm test              # 42 tests unitaires : moteur de workflow (dont ASSET_SCAN), récurrences, webhooks, SSRF, clés d'API
+npm run test:smoke    # parcours de bout en bout sur une API démarrée et seedée (44 étapes, dont 11 V3)
 ```
 
 Le test de bout en bout couvre :
@@ -275,9 +275,10 @@ Le test de bout en bout couvre :
 - le GPS live et les suggestions d'affectation ;
 - le workflow complet avec géofence, photos, checklist, validation et évaluation ;
 - la synchronisation offline (ordre, idempotence, rejet, horodatage conservé, réaffectation) ;
-- le planning, le reporting, l'export CSV, les notifications, l'audit et les événements temps réel.
+- le planning, le reporting, l'export CSV, les notifications, l'audit et les événements temps réel ;
+- **V3** : scan QR exigé et mauvais équipement refusé, rapport PDF vérifié par empreinte, réintervention, demandes client, équipements, maintenance préventive, clés d'API, auto-dispatch, webhooks reçus avec signature vérifiée par un récepteur local, métriques et `X-Request-Id`.
 
-La CI GitHub Actions (`.github/workflows/ci.yml`) enchaîne types, tests unitaires, build, migrations et seed, vérifie que **les migrations sont à jour avec les entités**, lance le test de bout en bout, puis publie l'image Docker sur GHCR.
+La CI GitHub Actions (`.github/workflows/ci.yml` **à la racine du dépôt**) enchaîne types, tests unitaires, build, migrations et seed, vérifie que **les migrations sont à jour avec les entités**, lance le test de bout en bout, puis publie l'image Docker sur GHCR.
 
 Mesure indicative en local sur le jeu de démonstration (150 requêtes par route) : P95 de `GET /tasks` ≈ 21 ms, positions live ≈ 6 ms, dashboard ≈ 9 ms, pour une cible de 300 ms. Un test de charge sur un volume réaliste reste à faire avant la mise en production.
 
@@ -294,8 +295,53 @@ Mesure indicative en local sur le jeu de démonstration (150 requêtes par route
 
 ### Limites connues de cette version
 
-- L'intégration **Sentry** n'est pas branchée : la variable `SENTRY_DSN` est prévue mais inutilisée.
 - Pas de fournisseur SMS réel.
-- Pas de rendu PDF des rapports ; l'export se fait en CSV.
+- Les rapports de pilotage s'exportent en CSV (le PDF V3 concerne le rapport d'intervention).
+- Photos HEIC/WebP non intégrées au rapport PDF (JPEG et PNG uniquement ; les autres restent téléchargeables).
+- Écrans du portail client à réaliser : l'API (`/service-requests`, rapports, équipements) est prête.
 - L'isolation multi-tenant est applicative ; la Row Level Security PostgreSQL est une évolution possible.
 - Le verrouillage pessimiste sérialise les transitions concurrentes sur une même intervention, mais la résolution de conflits se limite aux règles du §7 ci-dessus.
+
+---
+
+## 11. Nouveautés V3
+
+Détail : `CHANGELOG.md` à la racine du dépôt et *Cahier des charges V3.0*.
+
+| Domaine | Endpoints | Permission |
+|---|---|---|
+| Équipements | `GET/POST /assets`, `GET/PATCH /assets/:id`, `GET /assets/lookup?code=`, `GET /assets/:id/history`, `GET /assets/:id/qr.png` | `asset:read` / `asset:manage` |
+| Maintenance préventive | `GET/POST /maintenance-plans`, `GET/PATCH /maintenance-plans/:id`, `GET …/:id/preview`, `GET …/:id/tasks`, `POST …/:id/generate` | `maintenance:read` / `maintenance:manage` |
+| Demandes client | `POST /service-requests` | `task:request` |
+| Rapport d'intervention | `GET /tasks/:id/report`, `GET /tasks/:id/report/verify?sha256=`, `POST /tasks/:id/report` | `task_report:read` / `task:update` |
+| Intégrations | `GET /integrations/catalog`, `/integrations/webhooks` (CRUD, `test`, `rotate-secret`, `deliveries`), `POST /integrations/deliveries/:id/redeliver`, `/integrations/api-keys` | `integration:manage` (ADMIN) |
+| Métriques | `GET /api/metrics` (Prometheus ; Bearer `METRICS_TOKEN` si défini) | public |
+
+### Scan QR (`ASSET_SCAN`)
+
+Le workflow standard exige, pour passer « En intervention », le champ `assetCode` sur `/transition` ou `/start` (ou dans l'opération `TASK_TRANSITION` de `/sync/push`) lorsque l'intervention a un équipement. La valeur acceptée est le contenu du QR (`FIELDOPS:ASSET:EQ-000123`) ou le code seul, sans tenir compte de la casse. L'historique enregistre `assetScanned` et `assetScanMethod` (`QR` ou `MANUAL`).
+
+### Webhooks : vérifier une signature (Node.js)
+
+```js
+const [, t, v1] = /^t=(\d+),v1=([0-9a-f]{64})$/.exec(req.headers['x-fieldops-signature']);
+const expected = crypto.createHmac('sha256', SECRET).update(`${t}.${rawBody}`).digest('hex');
+const ok = crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1)) && Math.abs(Date.now() / 1000 - t) < 300;
+```
+
+Utiliser le **corps brut** reçu (pas un JSON re-sérialisé) et dédoublonner sur `X-FieldOps-Delivery`.
+
+### Réglages d'organisation ajoutés (`PATCH /organization`)
+
+```json
+{ "settings": { "autoDispatch": { "enabled": true, "minScore": 0.5, "onlyOnDuty": true },
+                "reworkWindowDays": 30, "clientRequestTaskType": "MAINTENANCE" } }
+```
+
+### Variables d'environnement ajoutées
+
+`SCHEDULERS_ENABLED` (false : pas de jobs planifiés sur l'instance), `WEBHOOKS_ALLOW_HTTP` / `WEBHOOKS_ALLOW_PRIVATE` (dérogations SSRF, strictes par défaut en production), `METRICS_TOKEN`, `LOG_FORMAT=json`, `SENTRY_DSN`, `SENTRY_TRACES_SAMPLE_RATE`, `APP_VERSION`.
+
+### Migration depuis la V2
+
+La migration `V3Features` est additive et réversible. **Déployer l'application mobile V3 avant d'activer une version de workflow contenant `ASSET_SCAN`** : une application V2 considère cette condition comme non remplie.

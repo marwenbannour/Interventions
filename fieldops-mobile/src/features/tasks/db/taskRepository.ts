@@ -49,6 +49,9 @@ function applyApiTask(record: TaskModel, t: ApiTask) {
   record.signatureKey = t.signatureKey ?? null;
   record.signedByName = t.signedByName ?? null;
   record.version = t.version;
+  record.asset = t.asset ?? null;
+  record.origin = t.origin ?? null;
+  record.isRework = t.isRework ?? false;
   record.serverUpdatedAt = new Date(t.updatedAt);
   record.localStatus = 'synced';
 }

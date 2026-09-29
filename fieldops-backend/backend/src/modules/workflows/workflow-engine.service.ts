@@ -8,7 +8,8 @@ import { fromPoint } from '../../common/utils/geo';
 import { Site } from '../clients/entities/site.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { WorkflowDefinition } from './entities/workflow-definition.entity';
-import { WorkflowCondition, WorkflowState, WorkflowTransition } from './workflow.types';
+import { normalizeAssetCode } from '../assets/assets.service';
+import { CONDITION_TYPES, WorkflowCondition, WorkflowState, WorkflowTransition } from './workflow.types';
 
 export interface TransitionContext {
   task: Task;
@@ -20,6 +21,10 @@ export interface TransitionContext {
   site?: Site | null;
   photoCounts: Partial<Record<PhotoType, { total: number; validated: number }>>;
   defaultGeofenceMeters: number;
+  /** V3 — code de l'équipement rattaché à la tâche (null : pas d'équipement). */
+  taskAssetCode?: string | null;
+  /** V3 — code scanné par l'agent au moment de l'action. */
+  assetCode?: string | null;
 }
 
 export interface AvailableTransition {
@@ -31,6 +36,8 @@ export interface AvailableTransition {
   requiresLocation: boolean;
   requiredPhotos: PhotoType[];
   requiresSignature: boolean;
+  /** V3 — un scan du QR de l'équipement sera demandé au moment de l'action. */
+  requiresAssetScan: boolean;
 }
 
 /** Distance haversine en mètres. */
@@ -108,7 +115,7 @@ export class WorkflowEngineService {
       .map((t) => {
         const conds = t.conditions ?? [];
         // Les conditions "saisies au moment de l'action" ne sont pas considérées manquantes.
-        const deferred = new Set(['COMMENT_REQUIRED', 'GEOFENCE']);
+        const deferred = new Set(['COMMENT_REQUIRED', 'GEOFENCE', 'ASSET_SCAN']);
         return {
           to: t.to,
           label: t.label,
@@ -117,6 +124,7 @@ export class WorkflowEngineService {
           requiresLocation: conds.some((c) => c.type === 'GEOFENCE'),
           requiredPhotos: conds.filter((c) => c.type === 'PHOTO_REQUIRED').map((c: any) => c.photoType),
           requiresSignature: conds.some((c) => c.type === 'SIGNATURE_REQUIRED'),
+          requiresAssetScan: !!ctx.taskAssetCode && conds.some((c) => c.type === 'ASSET_SCAN'),
         };
       });
   }
@@ -179,6 +187,10 @@ export class WorkflowEngineService {
         const radius = c.radiusMeters ?? ctx.site?.geofenceMeters ?? ctx.defaultGeofenceMeters;
         return distanceMeters(sitePos, { lat: ctx.lat, lng: ctx.lng }) <= radius;
       }
+      case 'ASSET_SCAN': {
+        if (user === 'SYSTEM' || !ctx.taskAssetCode) return true;
+        return !!ctx.assetCode && normalizeAssetCode(ctx.assetCode) === ctx.taskAssetCode.toUpperCase();
+      }
       default:
         return false;
     }
@@ -193,6 +205,7 @@ export class WorkflowEngineService {
       case 'COMMENT_REQUIRED': return 'Commentaire requis';
       case 'GEOFENCE': return 'Position hors du périmètre du site';
       case 'SIGNATURE_REQUIRED': return 'Signature requise';
+      case 'ASSET_SCAN': return "Scan du QR code de l'équipement requis";
     }
   }
 
@@ -207,6 +220,9 @@ export class WorkflowEngineService {
       froms.forEach((f) => !codes.has(f) && errors.push(`Transition #${i} : état source inconnu ${f}`));
       if (!codes.has(t.to)) errors.push(`Transition #${i} : état cible inconnu ${t.to}`);
       if (!t.roles?.length) errors.push(`Transition #${i} : aucun rôle autorisé`);
+      (t.conditions ?? []).forEach((c) => {
+        if (!CONDITION_TYPES.includes(c.type)) errors.push(`Transition #${i} : condition inconnue ${c.type}`);
+      });
     });
     if (errors.length) throw new UnprocessableEntityException({ message: 'Workflow invalide', errors });
   }

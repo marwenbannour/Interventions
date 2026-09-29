@@ -9,6 +9,9 @@ import { Client } from '../../modules/clients/entities/client.entity';
 import { Site } from '../../modules/clients/entities/site.entity';
 import { Organization } from '../../modules/organizations/entities/organization.entity';
 import { Zone } from '../../modules/organizations/entities/zone.entity';
+import { Asset } from '../../modules/assets/entities/asset.entity';
+import { MaintenancePlan } from '../../modules/maintenance/entities/maintenance-plan.entity';
+import { MaintenanceFrequency } from '../../modules/maintenance/recurrence';
 import { SlaPolicy } from '../../modules/sla/entities/sla-policy.entity';
 import { Task } from '../../modules/tasks/entities/task.entity';
 import { TaskEvent } from '../../modules/tasks/entities/task-event.entity';
@@ -42,7 +45,8 @@ async function main() {
       );
       const has = (t: string, c: string) => cols.some((x) => x.table_name === t && x.column_name === c);
       for (const table of [
-        'sync_operations', 'evaluations', 'photos', 'task_events', 'tasks', 'sla_policies', 'workflow_definitions',
+        'sync_operations', 'evaluations', 'photos', 'task_events', 'tasks', 'maintenance_plans', 'assets',
+        'webhook_deliveries', 'webhook_endpoints', 'api_keys', 'sla_policies', 'workflow_definitions',
         'location_pings', 'notifications', 'device_tokens', 'refresh_tokens', 'agent_profiles', 'sites', 'clients',
         'teams', 'zones', 'audit_logs',
       ]) {
@@ -69,6 +73,9 @@ async function main() {
           locationRetentionDays: 90,
           defaultGeofenceMeters: 300,
           mfaRequiredRoles: [],
+          reworkWindowDays: 30,
+          autoDispatch: { enabled: false, minScore: 0.5, onlyOnDuty: true },
+          clientRequestTaskType: 'MAINTENANCE',
         } as any,
       }),
     );
@@ -159,9 +166,34 @@ async function main() {
     const at = (minFromNow: number) => new Date(now + minFromNow * 60_000);
     let seq = 0;
     const year = new Date().getFullYear();
+    // ---- V3 : parc d'équipements (QR « FIELDOPS:ASSET:<code> »)
+    const mkAsset = (a: Partial<Asset> & { site: Site; code: string; name: string }) =>
+      m.save(m.create(Asset, {
+        organizationId: orgId, clientId: a.site.clientId, siteId: a.site.id, code: a.code, name: a.name,
+        category: a.category, location: a.location, brand: a.brand, model: a.model, serialNumber: a.serialNumber,
+        installedAt: a.installedAt, attributes: a.attributes ?? {},
+      }));
+    const tgbt = await mkAsset({
+      site: sites[0], code: 'EQ-000001', name: 'Tableau électrique TGBT — bloc B', category: 'ELECTRICITE',
+      location: 'Bâtiment A, sous-sol, local technique 02', brand: 'Schneider Electric', model: 'Prisma P', serialNumber: 'PRP-22-0419',
+      installedAt: '2019-06-12', attributes: { intensiteA: 630 },
+    });
+    await mkAsset({
+      site: sites[0], code: 'EQ-000002', name: 'Chaudière gaz condensation', category: 'CVC', location: 'Chaufferie',
+      brand: 'Viessmann', model: 'Vitocrossal 300', serialNumber: 'VC3-7781', installedAt: '2021-10-04', attributes: { puissanceKW: 320 },
+    });
+    const cta = await mkAsset({
+      site: sites[2], code: 'EQ-000003', name: 'Centrale de traitement d’air — toiture', category: 'CVC', location: 'Toiture terrasse',
+      brand: 'France Air', model: 'Mega Line', serialNumber: 'FA-ML-3312', installedAt: '2018-03-20', attributes: { debitM3h: 12000 },
+    });
+    await mkAsset({
+      site: sites[3], code: 'EQ-000004', name: 'Laveuse-essoreuse 60 kg', category: 'LINGE', location: 'Lingerie, niveau -1',
+      brand: 'Electrolux', model: 'WH6-60', serialNumber: 'EL-60-5520', installedAt: '2022-01-17',
+    });
+
     const mkTask = async (p: {
       title: string; type: string; priority: TaskPriority; site: Site; status: string; agent?: User;
-      start?: number; skills?: string[]; checklist?: string[]; description?: string;
+      start?: number; skills?: string[]; checklist?: string[]; description?: string; assetId?: string;
     }) => {
       seq += 1;
       const createdAt = new Date(now - 3 * 60_000);
@@ -186,6 +218,7 @@ async function main() {
         scheduledStart: p.start != null ? at(p.start) : null,
         scheduledEnd: p.start != null ? at(p.start + 90) : null,
         estimatedDurationMin: 60,
+        assetId: p.assetId ?? null,
         assignedAt: p.agent ? new Date(now - 2 * 60_000) : null,
         plannedAt: p.status !== 'CREATED' ? new Date(now - 2 * 60_000) : null,
         ackDueAt: new Date(createdAt.getTime() + ack * 60_000),
@@ -202,7 +235,7 @@ async function main() {
 
     await mkTask({
       title: 'Panne éclairage couloir bloc B', type: 'MAINTENANCE', priority: TaskPriority.URGENT, site: sites[0],
-      status: 'ASSIGNED', agent: agents[0], start: 10, skills: ['ELECTRICITE'],
+      status: 'ASSIGNED', agent: agents[0], start: 10, skills: ['ELECTRICITE'], assetId: tgbt.id,
       checklist: ['Couper le circuit', 'Remplacer le luminaire', 'Tester le circuit'],
       description: 'Plusieurs néons hors service, zone de passage patients.',
     });
@@ -221,11 +254,38 @@ async function main() {
       status: 'PLANNED', start: 240, skills: ['LINGE'], checklist: ['Pesée des sacs', 'Chargement véhicule'],
     });
     await mkTask({
-      title: 'Maintenance préventive CTA toiture', type: 'MAINTENANCE', priority: TaskPriority.LOW, site: sites[2],
+      title: 'Maintenance préventive CTA toiture', type: 'MAINTENANCE', priority: TaskPriority.LOW, site: sites[2], assetId: cta.id,
       status: 'CREATED', skills: ['CVC'], checklist: ['Remplacement filtres', 'Relevé pressions', 'Nettoyage batterie'],
     });
 
     await m.query(`UPDATE organizations SET "taskSeq" = $2 WHERE id = $1`, [orgId, seq]);
+
+    // ---- V3 : maintenance préventive (le 1er plan entre dans sa fenêtre de préparation au premier scan)
+    const day = 86_400_000;
+    const at8 = (days: number) => {
+      const d = new Date(now + days * day);
+      d.setUTCHours(7, 0, 0, 0);
+      return d;
+    };
+    const plans: Partial<MaintenancePlan>[] = [
+      {
+        name: 'CTA toiture — entretien trimestriel', siteId: sites[2].id, clientId: sites[2].clientId, assetId: cta.id,
+        taskType: 'MAINTENANCE', title: 'Entretien trimestriel CTA toiture', priority: TaskPriority.NORMAL, requiredSkills: ['CVC'],
+        checklist: [{ label: 'Remplacement des filtres' }, { label: 'Contrôle courroies et roulements' }, { label: 'Relevé des pressions' }],
+        estimatedDurationMin: 120, frequency: MaintenanceFrequency.MONTHLY, interval: 3, startAt: at8(10), leadTimeDays: 14,
+      },
+      {
+        name: 'TGBT — contrôle thermographique mensuel', siteId: sites[0].id, clientId: sites[0].clientId, assetId: tgbt.id,
+        taskType: 'MAINTENANCE', title: 'Contrôle thermographique TGBT', priority: TaskPriority.NORMAL, requiredSkills: ['ELECTRICITE'],
+        checklist: [{ label: 'Thermographie des jeux de barres' }, { label: 'Serrage des connexions' }],
+        estimatedDurationMin: 60, frequency: MaintenanceFrequency.MONTHLY, interval: 1, startAt: at8(20), leadTimeDays: 7,
+      },
+    ];
+    for (const p of plans) {
+      await m.save(m.create(MaintenancePlan, {
+        ...p, organizationId: orgId, occurrenceIndex: 0, nextDueAt: p.startAt, isActive: true, createdById: sup.id,
+      }));
+    }
   });
 
   console.log(`
@@ -238,6 +298,8 @@ async function main() {
   Direction    direction@demo.fieldops.io       Direction123!
   Agent        agent1@demo.fieldops.io          Agent123!demo   (agent2, agent3 idem)
   Client       client@clinique-sm.fr            Client123!demo
+
+  V3 : 4 équipements (QR FIELDOPS:ASSET:EQ-00000x), 2 plans de maintenance préventive.
 `);
   await ds.destroy();
 }

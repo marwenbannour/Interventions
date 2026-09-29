@@ -9,13 +9,14 @@ import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useSessionStore } from '@/features/auth/store/session.store';
 import { ApiError } from '@/lib/api/errors';
-import { canAssignTasks } from '@/lib/auth/permissions';
+import { canAssignTasks, canRegenerateReport } from '@/lib/auth/permissions';
 import { useTaskDetail, useTaskHistory } from '../hooks/useTaskDetail';
 import { useUnassignTask } from '../hooks/useTaskActions';
-import { eventSummary, priorityBadgeVariant, priorityLabel, statusLabel } from '../utils/labels';
+import { eventSummary, originLabel, priorityBadgeVariant, priorityLabel, statusLabel } from '../utils/labels';
 import { AssignAgentDialog } from './AssignAgentDialog';
 import { NoteForm } from './NoteForm';
 import { PhotosReviewSection } from './PhotosReviewSection';
+import { ReportSection } from './ReportSection';
 import { TransitionButtons } from './TransitionButtons';
 
 function formatDateTime(iso: string | null | undefined): string {
@@ -81,6 +82,14 @@ export function TaskDetailPanel({ taskId, onClose }: { taskId: string | null; on
                   <Badge variant={priorityBadgeVariant(task.priority)}>{priorityLabel(task.priority)}</Badge>
                 </div>
                 {task.description && <p className="text-sm text-muted-foreground">{task.description}</p>}
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <Badge variant="outline" className="text-[10px]">{originLabel(task.origin)}</Badge>
+                  {task.isRework && (
+                    <Badge variant="destructive" className="text-[10px]">
+                      Réintervention{task.reworkOf ? ` — suite à ${task.reworkOf.reference}` : ''}
+                    </Badge>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -89,6 +98,8 @@ export function TaskDetailPanel({ taskId, onClose }: { taskId: string | null; on
                 <InfoRow label="Site" value={task.site?.name ?? '—'} />
                 <InfoRow label="Adresse" value={task.site?.address ?? '—'} />
                 <InfoRow label="Client" value={task.client?.name ?? '—'} />
+                {task.asset && <InfoRow label="Équipement" value={`${task.asset.code} — ${task.asset.name}`} />}
+                {task.asset?.location && <InfoRow label="Emplacement" value={task.asset.location} />}
                 <InfoRow
                   label="Agent"
                   value={task.agent ? `${task.agent.firstName} ${task.agent.lastName}` : 'Non affectée'}
@@ -143,6 +154,8 @@ export function TaskDetailPanel({ taskId, onClose }: { taskId: string | null; on
                   </ul>
                 </div>
               )}
+
+              <ReportSection task={task} canRegenerate={!!role && canRegenerateReport(role)} />
 
               <PhotosReviewSection taskId={task.id} />
 

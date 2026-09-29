@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { Permission, roleHasPermission } from '../enums/permission.enum';
+import { Permission, userHasPermission } from '../enums/permission.enum';
 import { AuthUser } from '../types/auth-user';
 
 @Injectable()
@@ -21,7 +21,7 @@ export class PermissionsGuard implements CanActivate {
 
     const user: AuthUser | undefined = context.switchToHttp().getRequest().user;
     if (!user) throw new ForbiddenException();
-    const ok = required.every((p) => roleHasPermission(user.role, p));
+    const ok = required.every((p) => userHasPermission(user, p));
     if (!ok) throw new ForbiddenException('Permissions insuffisantes');
     return true;
   }

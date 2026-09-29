@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 1,
+  version: 2,
   tables: [
     tableSchema({
       name: 'tasks',
@@ -28,6 +28,10 @@ export const schema = appSchema({
         { name: 'signature_key', type: 'string', isOptional: true },
         { name: 'signed_by_name', type: 'string', isOptional: true },
         { name: 'photo_counts_json', type: 'string', isOptional: true },
+        // V3 (schéma v2)
+        { name: 'asset_json', type: 'string', isOptional: true },
+        { name: 'origin', type: 'string', isOptional: true },
+        { name: 'is_rework', type: 'boolean', isOptional: true },
         { name: 'version', type: 'number' },
         { name: 'server_updated_at', type: 'number' },
         { name: 'local_status', type: 'string' },

@@ -19,9 +19,31 @@ export interface LocalTaskForEngine {
   agentId: string | null;
   checklist: ChecklistItem[];
   signatureKey: string | null;
+  /** V3 — code de l'équipement rattaché (null : pas d'équipement). */
+  assetCode?: string | null;
 }
 
-const DEFERRED_CONDITIONS = new Set<WorkflowCondition['type']>(['COMMENT_REQUIRED', 'GEOFENCE']);
+/**
+ * Conditions saisies au moment de l'action (commentaire, position, scan QR) : jamais comptées
+ * comme « manquantes » à l'affichage. V3 : ASSET_SCAN doit figurer ici — une version antérieure
+ * qui ne la connaît pas tombe dans `default: return false` et bloque la transition.
+ */
+const DEFERRED_CONDITIONS = new Set<WorkflowCondition['type']>(['COMMENT_REQUIRED', 'GEOFENCE', 'ASSET_SCAN']);
+
+/** Préfixe des QR FieldOps — miroir de ASSET_QR_PREFIX (backend, assets.service.ts). */
+export const ASSET_QR_PREFIX = 'FIELDOPS:ASSET:';
+
+/** Portage de normalizeAssetCode : accepte le contenu QR complet ou le code saisi à la main. */
+export function normalizeAssetCode(raw: string): string {
+  const v = raw.trim();
+  return (v.toUpperCase().startsWith(ASSET_QR_PREFIX) ? v.slice(ASSET_QR_PREFIX.length) : v).toUpperCase();
+}
+
+/** Vérification locale du scan (feedback immédiat, hors-ligne) — le serveur reste seul juge. */
+export function checkAssetScan(expectedCode: string | null | undefined, scanned: string): boolean {
+  if (!expectedCode) return true;
+  return normalizeAssetCode(scanned) === expectedCode.toUpperCase();
+}
 
 function isFinal(def: WorkflowDefinitionData, code: string): boolean {
   return !!def.states.find((s) => s.code === code)?.final;
@@ -60,6 +82,9 @@ function check(c: WorkflowCondition, ctx: CheckContext): boolean {
     case 'GEOFENCE':
       // Différée : jamais évaluée ici (voir checkGeofence, utilisée séparément au moment de l'action).
       return true;
+    case 'ASSET_SCAN':
+      // Différée : vérifiée au scan (checkAssetScan), puis par le serveur.
+      return true;
     default:
       return false;
   }
@@ -81,6 +106,8 @@ function defaultMessage(c: WorkflowCondition): string {
       return 'Position hors du périmètre du site';
     case 'SIGNATURE_REQUIRED':
       return 'Signature requise';
+    case 'ASSET_SCAN':
+      return "Scan du QR code de l'équipement requis";
     default:
       return 'Condition non remplie';
   }
@@ -121,6 +148,7 @@ export function computeAvailableTransitions(
         requiresLocation: conds.some((c) => c.type === 'GEOFENCE'),
         requiredPhotos: conds.filter((c) => c.type === 'PHOTO_REQUIRED' && c.photoType).map((c) => c.photoType!),
         requiresSignature: conds.some((c) => c.type === 'SIGNATURE_REQUIRED'),
+        requiresAssetScan: !!task.assetCode && conds.some((c) => c.type === 'ASSET_SCAN'),
       };
     });
 }

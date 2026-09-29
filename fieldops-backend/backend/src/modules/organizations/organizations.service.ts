@@ -6,6 +6,18 @@ import { Zone } from './entities/zone.entity';
 import { Team } from './entities/team.entity';
 import { CreateTeamDto, CreateZoneDto, UpdateOrganizationDto, UpdateTeamDto, UpdateZoneDto } from './dto/organization.dto';
 
+/** Fusion profonde (1 niveau) avec les valeurs par défaut — tolère les réglages partiels d'avant V3. */
+function mergeSettings(...parts: (Partial<OrganizationSettings> | undefined | null)[]): OrganizationSettings {
+  const out = { ...DEFAULT_ORG_SETTINGS, autoDispatch: { ...DEFAULT_ORG_SETTINGS.autoDispatch } };
+  for (const p of parts) {
+    if (!p) continue;
+    const { autoDispatch, ...rest } = p;
+    Object.assign(out, rest);
+    if (autoDispatch) out.autoDispatch = { ...out.autoDispatch, ...autoDispatch };
+  }
+  return out;
+}
+
 @Injectable()
 export class OrganizationsService {
   constructor(
@@ -22,13 +34,13 @@ export class OrganizationsService {
 
   async getSettings(id: string): Promise<OrganizationSettings> {
     const org = await this.get(id);
-    return { ...DEFAULT_ORG_SETTINGS, ...org.settings };
+    return mergeSettings(org.settings);
   }
 
   async update(id: string, dto: UpdateOrganizationDto) {
     const org = await this.get(id);
     if (dto.name) org.name = dto.name;
-    if (dto.settings) org.settings = { ...DEFAULT_ORG_SETTINGS, ...org.settings, ...dto.settings };
+    if (dto.settings) org.settings = mergeSettings(org.settings, dto.settings as Partial<OrganizationSettings>);
     return this.orgs.save(org);
   }
 
