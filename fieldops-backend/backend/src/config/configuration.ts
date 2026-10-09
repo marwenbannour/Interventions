@@ -17,6 +17,9 @@ export default () => ({
     host: process.env.REDIS_HOST ?? 'localhost',
     port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
     password: process.env.REDIS_PASSWORD || undefined,
+    // 0 = résolution IPv4 et IPv6 : le réseau privé Railway (redis.railway.internal) est en IPv6,
+    // or ioredis ne cherche que l'IPv4 par défaut.
+    family: parseInt(process.env.REDIS_FAMILY ?? '0', 10),
   },
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET,

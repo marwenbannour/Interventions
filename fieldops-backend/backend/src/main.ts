@@ -45,6 +45,7 @@ async function bootstrap() {
     host: cfg.get('redis.host'),
     port: cfg.get<number>('redis.port'),
     password: cfg.get('redis.password'),
+    family: cfg.get<number>('redis.family'),
   });
   await redisIo.connectToRedis();
   app.useWebSocketAdapter(redisIo);

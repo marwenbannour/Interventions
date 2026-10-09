@@ -53,6 +53,7 @@ import { WorkflowsModule } from './modules/workflows/workflows.module';
           host: cfg.get('redis.host'),
           port: cfg.get<number>('redis.port'),
           password: cfg.get('redis.password'),
+          family: cfg.get<number>('redis.family'),
         },
         prefix: 'fieldops',
       }),
