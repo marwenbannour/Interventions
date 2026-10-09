@@ -58,6 +58,11 @@ const config: ExpoConfig = {
     // toujours fonctionnel, juste moins rapide que JSI — voir database.ts (jsi: false assorti).
     ['@morrowdigital/watermelondb-expo-plugin', { disableJsi: true }],
     'expo-notifications',
+    // L'API de démo/LAN est servie en HTTP (http://<IP LAN>:3000) : sans ce flag, Android 9+
+    // bloque le trafic en clair dans les builds release et la connexion échoue (« vérifier le
+    // réseau »). Les builds debug l'autorisent déjà via leur propre AndroidManifest.
+    // À retirer quand l'API sera servie en HTTPS.
+    ['expo-build-properties', { android: { usesCleartextTraffic: true } }],
   ],
   extra: {
     apiBaseUrl,

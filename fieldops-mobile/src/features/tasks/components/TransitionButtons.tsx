@@ -1,6 +1,6 @@
 import * as Location from 'expo-location';
 import { useState } from 'react';
-import { Alert, Modal, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '../../../components/ui/primitives';
 import { radius } from '../../../theme/palette';
 import { makeStyles, useTheme } from '../../../theme/ThemeProvider';
@@ -13,8 +13,20 @@ import type { AvailableTransition } from '../../../lib/api/types';
 async function getCurrentPosition(): Promise<{ lat: number; lng: number } | null> {
   const { status } = await Location.requestForegroundPermissionsAsync();
   if (status !== 'granted') return null;
-  const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-  return { lat: position.coords.latitude, lng: position.coords.longitude };
+  // Localisation coupée sur le téléphone : getCurrentPositionAsync rejetterait avec un message
+  // natif en anglais. Sur Android, on propose d'abord la fenêtre système « Activer la localisation ».
+  if (!(await Location.hasServicesEnabledAsync())) {
+    if (Platform.OS !== 'android') return null;
+    try {
+      await Location.enableNetworkProviderAsync();
+    } catch {
+      return null;
+    }
+  }
+  const position =
+    (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).catch(() => null)) ??
+    (await Location.getLastKnownPositionAsync({ maxAge: 10 * 60_000 }));
+  return position ? { lat: position.coords.latitude, lng: position.coords.longitude } : null;
 }
 
 /** Transitions « de retrait » (refus, annulation, non-conformité) affichées en rouge. */
@@ -45,7 +57,7 @@ export function TransitionButtons({ task, transitions }: Props) {
         if (!pos) {
           Alert.alert(
             'Position requise',
-            "Impossible d'obtenir votre position. Vérifiez que la localisation est activée pour FieldOps.",
+            "Impossible d'obtenir votre position. Activez la localisation (GPS) du téléphone et autorisez-la pour FieldOps, puis réessayez.",
           );
           return;
         }
